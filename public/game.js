@@ -104,6 +104,7 @@
     const isHost = lobby.hostId === myId;
     const playing = lobby.phase === 'playing';
     $('startBtn').style.display = isHost && !playing ? 'block' : 'none';
+    $('invites').style.display = isHost ? 'flex' : 'none';
     $('lobbyHint').textContent = playing ? '游戏进行中，请等待下一局'
       : isHost ? '你是房主，人齐后按“开始游戏”' : '等待房主开始游戏…';
     document.querySelectorAll('.team button').forEach(b => (b.disabled = playing));
@@ -129,16 +130,80 @@
     return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   }
 
-  $('nameInput').value = localStorage.getItem('name') || '';
+  // 通过邀请二维码打开时，网址带 ?team=red 或 ?team=blue
+  const TEAM_NAME = { red: '红队', blue: '蓝队' };
+  let invitedTeam = new URLSearchParams(location.search).get('team');
+  if (!TEAM_NAME[invitedTeam]) invitedTeam = null;
+  if (invitedTeam) {
+    const b = $('inviteBanner');
+    b.textContent = `你被邀请加入${TEAM_NAME[invitedTeam]}`;
+    b.style.background = invitedTeam === 'red' ? '#e5484d' : '#3e8ef7';
+    b.style.display = 'block';
+    $('joinBtn').textContent = `加入${TEAM_NAME[invitedTeam]}`;
+  }
+
+  try { $('nameInput').value = localStorage.getItem('name') || ''; } catch {}
   $('joinBtn').onclick = () => {
     myName = $('nameInput').value.trim() || '玩家';
     try { localStorage.setItem('name', myName); } catch {}
     sendMsg({ t: 'join', name: myName });
+    if (invitedTeam) {
+      sendMsg({ t: 'team', team: invitedTeam });
+      invitedTeam = null;
+      history.replaceState(null, '', location.pathname);
+    }
   };
   document.querySelectorAll('.team button').forEach(b => {
     b.onclick = () => sendMsg({ t: 'team', team: b.dataset.team });
   });
   $('startBtn').onclick = () => sendMsg({ t: 'start' });
+  // ===== 邀请二维码 =====
+  let qrTeam = 'red';
+  let addrGuess = null;
+  const isLocal = h => h === 'localhost' || h === '127.0.0.1' || h === '[::1]';
+
+  async function guessAddr() {
+    if (!isLocal(location.hostname)) return location.host;
+    const port = location.port || '80';
+    try {
+      const r = await (await fetch('/api/ip')).json();
+      if (r.ips && r.ips.length) return r.ips[0] + ':' + port;
+    } catch {}
+    return '192.168.43.1:' + port;   // 安卓热点常见地址
+  }
+
+  function drawQR() {
+    const addr = $('qrAddr').value.trim().replace(/^https?:\/\//, '').replace(/\/.*$/, '');
+    const url = `http://${addr}/?team=${qrTeam}`;
+    const qr = qrcode(0, 'M');
+    qr.addData(url);
+    qr.make();
+    const n = qr.getModuleCount(), margin = 2, cell = 8;
+    const c = $('qrCanvas'), size = (n + margin * 2) * cell;
+    c.width = c.height = size;
+    const g = c.getContext('2d');
+    g.fillStyle = '#fff';
+    g.fillRect(0, 0, size, size);
+    g.fillStyle = '#000';
+    for (let r = 0; r < n; r++) for (let k = 0; k < n; k++) {
+      if (qr.isDark(r, k)) g.fillRect((k + margin) * cell, (r + margin) * cell, cell, cell);
+    }
+  }
+
+  document.querySelectorAll('[data-invite]').forEach(b => {
+    b.onclick = async () => {
+      qrTeam = b.dataset.invite;
+      $('qrTitle').textContent = `扫码加入${TEAM_NAME[qrTeam]}`;
+      $('qrTitle').style.color = qrTeam === 'red' ? '#e5484d' : '#3e8ef7';
+      if (!addrGuess) addrGuess = await guessAddr();
+      if (!$('qrAddr').value) $('qrAddr').value = addrGuess;
+      drawQR();
+      $('qrModal').classList.add('show');
+    };
+  });
+  $('qrAddr').oninput = drawQR;
+  $('qrClose').onclick = () => $('qrModal').classList.remove('show');
+
   $('botFill').onchange = () => sendMsg({ t: 'settings', botFill: $('botFill').checked });
   document.querySelectorAll('.botbox .lv').forEach(b => {
     b.onclick = () => sendMsg({ t: 'settings', difficulty: b.dataset.lv });

@@ -44,8 +44,23 @@ for (const o of HALF_OBSTACLES) {
 const PUBLIC_DIR = path.join(__dirname, 'public');
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'application/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8' };
 
+// 本机局域网 IP（给邀请二维码用）
+function localIPs() {
+  const ips = [];
+  try {
+    for (const list of Object.values(os.networkInterfaces())) {
+      for (const a of list || []) if (a.family === 'IPv4' && !a.internal) ips.push(a.address);
+    }
+  } catch { /* Termux 新版安卓可能无权读取网卡信息 */ }
+  return ips;
+}
+
 const server = http.createServer((req, res) => {
   let p = decodeURIComponent(req.url.split('?')[0]);
+  if (p === '/api/ip') {
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    return res.end(JSON.stringify({ ips: localIPs(), port: PORT }));
+  }
   if (p === '/') p = '/index.html';
   const file = path.normalize(path.join(PUBLIC_DIR, p));
   if (!file.startsWith(PUBLIC_DIR)) { res.writeHead(403); return res.end(); }
@@ -589,18 +604,9 @@ setInterval(() => {
 
 server.listen(PORT, '0.0.0.0', () => {
   console.log(`游戏服务器已启动，端口 ${PORT}`);
-  let found = false;
-  try {
-    for (const list of Object.values(os.networkInterfaces())) {
-      for (const a of list || []) {
-        if (a.family === 'IPv4' && !a.internal) {
-          console.log(`  其他手机浏览器打开： http://${a.address}:${PORT}`);
-          found = true;
-        }
-      }
-    }
-  } catch { /* Termux 新版安卓可能无权读取网卡信息 */ }
-  if (!found) {
+  const ips = localIPs();
+  for (const ip of ips) console.log(`  其他手机浏览器打开： http://${ip}:${PORT}`);
+  if (!ips.length) {
     console.log('  未能自动获取 IP。安卓热点通常是 http://192.168.43.1:' + PORT);
     console.log('  （或在 设置 > 热点 / WLAN 中查看本机 IP）');
   }

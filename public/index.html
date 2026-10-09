@@ -37,6 +37,17 @@
   .botbox .lv.on { background: #f0a020; color: #111; }
   #result { font-size: 26px; font-weight: bold; text-align: center; }
   #canvas { position: fixed; inset: 0; width: 100vw; height: 100vh; display: none; touch-action: none; }
+  #inviteBanner { display: none; font-size: 20px; font-weight: bold; padding: 8px 18px; border-radius: 10px; }
+  .invites { display: none; gap: 10px; }
+  .invites .red { background: #e5484d; }
+  .invites .blue { background: #3e8ef7; }
+  #qrModal { position: fixed; inset: 0; background: rgba(0,0,0,0.75); display: none; align-items: center; justify-content: center; z-index: 20; padding: 12px; overflow-y: auto; touch-action: pan-y; }
+  #qrModal.show { display: flex; }
+  .qrbox { background: #fff; color: #111; border-radius: 16px; padding: 16px; display: flex; flex-direction: column; align-items: center; gap: 8px; max-width: 95vw; margin: auto; }
+  .qrbox h2 { margin: 0; font-size: 22px; }
+  #qrCanvas { width: min(240px, 60vh); height: min(240px, 60vh); image-rendering: pixelated; }
+  .qrbox input { background: #f2f2f2; color: #111; border-color: #bbb; font-size: 16px; padding: 8px; width: min(260px, 80vw); }
+  .qrbox .small { font-size: 13px; color: #555; text-align: center; max-width: 300px; }
   #toast { position: fixed; top: 20px; left: 50%; transform: translateX(-50%); background: #c33; padding: 8px 16px; border-radius: 8px; display: none; z-index: 10; }
 </style>
 </head>
@@ -44,6 +55,7 @@
 
 <div id="joinScreen" class="screen show">
   <h1>掩体对战 5v5</h1>
+  <div id="inviteBanner"></div>
   <input id="nameInput" maxlength="12" placeholder="输入你的名字">
   <button id="joinBtn">进入大厅</button>
   <div class="hint">所有人连同一个热点，打开同一个网址即可</div>
@@ -73,14 +85,30 @@
     <button class="lv" data-lv="hard">困难</button>
     <div class="hint" id="botHint" style="width:100%"></div>
   </div>
+  <div class="invites" id="invites">
+    <button class="red" data-invite="red">邀请加入红队</button>
+    <button class="blue" data-invite="blue">邀请加入蓝队</button>
+  </div>
   <button id="startBtn" style="display:none">开始游戏</button>
   <div class="hint" id="lobbyHint"></div>
   <div class="hint">玩法：左半屏拖动 = 移动；右半屏拖动 = 瞄准并开火<br>躲在遮蔽物后面敌人看不到你。击倒敌人可拿走他剩下的子弹。<br>3 分钟后存活人数多的一队获胜，或先全灭对方获胜。<br>一个人玩：选一队，打开“电脑补位”，就能跟电脑对打。</div>
 </div>
 
+<div id="qrModal">
+  <div class="qrbox">
+    <h2 id="qrTitle">扫码加入红队</h2>
+    <canvas id="qrCanvas"></canvas>
+    <div class="small">朋友先连上热点，再用手机相机扫这个二维码</div>
+    <input id="qrAddr" placeholder="192.168.43.1:3000">
+    <div class="small" id="qrAddrHint">如果扫码后打不开，请把上面的地址改成热点手机的 IP（设置 &gt; 热点 里可以看到）</div>
+    <button id="qrClose">关闭</button>
+  </div>
+</div>
+
 <canvas id="canvas"></canvas>
 <div id="toast"></div>
 
+<script src="qrcode.js"></script>
 <script src="game.js"></script>
 </body>
 </html>
