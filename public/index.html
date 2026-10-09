@@ -30,6 +30,11 @@
   .team.red button { background: #e5484d; }
   .team.blue button { background: #3e8ef7; }
   .hint { color: #aaa; font-size: 14px; text-align: center; }
+  .botbox { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 10px; background: #1f232c; border-radius: 12px; padding: 10px 14px; width: min(560px, 95vw); }
+  .botbox label { font-size: 16px; display: flex; align-items: center; gap: 6px; }
+  .botbox input[type=checkbox] { width: 22px; height: 22px; }
+  .botbox .lv { font-size: 15px; padding: 8px 14px; background: #333; }
+  .botbox .lv.on { background: #f0a020; color: #111; }
   #result { font-size: 26px; font-weight: bold; text-align: center; }
   #canvas { position: fixed; inset: 0; width: 100vw; height: 100vh; display: none; touch-action: none; }
   #toast { position: fixed; top: 20px; left: 50%; transform: translateX(-50%); background: #c33; padding: 8px 16px; border-radius: 8px; display: none; z-index: 10; }
@@ -60,9 +65,17 @@
     </div>
   </div>
   <div class="hint" id="waitingList"></div>
+  <div class="botbox">
+    <label><input type="checkbox" id="botFill">电脑补位</label>
+    <span>难度：</span>
+    <button class="lv" data-lv="easy">简单</button>
+    <button class="lv" data-lv="normal">普通</button>
+    <button class="lv" data-lv="hard">困难</button>
+    <div class="hint" id="botHint" style="width:100%"></div>
+  </div>
   <button id="startBtn" style="display:none">开始游戏</button>
   <div class="hint" id="lobbyHint"></div>
-  <div class="hint">玩法：左半屏拖动 = 移动；右半屏拖动 = 瞄准并开火<br>躲在遮蔽物后面敌人看不到你。击倒敌人可拿走他剩下的子弹。<br>3 分钟后存活人数多的一队获胜，或先全灭对方获胜。</div>
+  <div class="hint">玩法：左半屏拖动 = 移动；右半屏拖动 = 瞄准并开火<br>躲在遮蔽物后面敌人看不到你。击倒敌人可拿走他剩下的子弹。<br>3 分钟后存活人数多的一队获胜，或先全灭对方获胜。<br>一个人玩：选一队，打开“电脑补位”，就能跟电脑对打。</div>
 </div>
 
 <canvas id="canvas"></canvas>

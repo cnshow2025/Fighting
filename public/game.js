@@ -107,6 +107,22 @@
     $('lobbyHint').textContent = playing ? '游戏进行中，请等待下一局'
       : isHost ? '你是房主，人齐后按“开始游戏”' : '等待房主开始游戏…';
     document.querySelectorAll('.team button').forEach(b => (b.disabled = playing));
+
+    // 电脑补位 / 难度（只有房主能改）
+    const st = lobby.settings;
+    const canEdit = isHost && !playing;
+    $('botFill').checked = st.botFill;
+    $('botFill').disabled = !canEdit;
+    document.querySelectorAll('.botbox .lv').forEach(b => {
+      b.classList.toggle('on', b.dataset.lv === st.difficulty);
+      b.disabled = !canEdit && b.dataset.lv !== st.difficulty;
+    });
+    const red = ps.filter(p => p.team === 'red').length, blue = ps.filter(p => p.team === 'blue').length;
+    const n = Math.max(red, blue, 1);
+    const bots = st.botFill ? (n - red) + (n - blue) : 0;
+    $('botHint').textContent = st.botFill
+      ? (bots ? `开局时会加入 ${bots} 个电脑（红队 ${n - red} 个、蓝队 ${n - blue} 个），变成 ${n}v${n}` : '两队人数一样，不需要电脑')
+      : '打开后，电脑会把人少的一队补到两队人数一样';
   }
 
   function esc(s) {
@@ -123,6 +139,10 @@
     b.onclick = () => sendMsg({ t: 'team', team: b.dataset.team });
   });
   $('startBtn').onclick = () => sendMsg({ t: 'start' });
+  $('botFill').onchange = () => sendMsg({ t: 'settings', botFill: $('botFill').checked });
+  document.querySelectorAll('.botbox .lv').forEach(b => {
+    b.onclick = () => sendMsg({ t: 'settings', difficulty: b.dataset.lv });
+  });
 
   // 全屏 + 横屏（手机上体验更好）
   document.addEventListener('click', () => {
