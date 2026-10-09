@@ -406,23 +406,35 @@
       ctx.moveTo(s.x, s.y);
       ctx.lineTo(s.x + Math.cos(p.a) * (R + 12), s.y + Math.sin(p.a) * (R + 12));
       ctx.stroke();
-      ctx.fillStyle = TEAM_COLOR[p.team];
+      // 圆圈切成和血量一样多的饼块，每中一枪就有一块变黑
+      const slice = Math.PI * 2 / cfg.maxHp;
+      for (let i = 0; i < cfg.maxHp; i++) {
+        const a0 = -Math.PI / 2 + i * slice;
+        ctx.fillStyle = i < p.hp ? TEAM_COLOR[p.team] : '#111';
+        ctx.beginPath();
+        ctx.moveTo(s.x, s.y);
+        ctx.arc(s.x, s.y, R, a0, a0 + slice);
+        ctx.closePath();
+        ctx.fill();
+      }
+      ctx.strokeStyle = 'rgba(0,0,0,0.6)';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      for (let i = 0; i < cfg.maxHp; i++) {
+        const a0 = -Math.PI / 2 + i * slice;
+        ctx.moveTo(s.x, s.y);
+        ctx.lineTo(s.x + Math.cos(a0) * R, s.y + Math.sin(a0) * R);
+      }
+      ctx.stroke();
       ctx.beginPath();
       ctx.arc(s.x, s.y, R, 0, Math.PI * 2);
-      ctx.fill();
-      if (me && p.id === me.id) {
-        ctx.strokeStyle = '#fff';
-        ctx.lineWidth = 3;
-        ctx.stroke();
-      }
+      ctx.strokeStyle = me && p.id === me.id ? '#fff' : TEAM_COLOR[p.team];
+      ctx.lineWidth = me && p.id === me.id ? 3 : 2;
+      ctx.stroke();
       ctx.fillStyle = '#fff';
       ctx.font = 'bold 13px sans-serif';
       ctx.textAlign = 'center';
-      ctx.fillText(p.name, s.x, s.y - R - 14);
-      for (let i = 0; i < cfg.maxHp; i++) {
-        ctx.fillStyle = i < p.hp ? '#4ade80' : 'rgba(255,255,255,0.2)';
-        ctx.fillRect(s.x - 15 + i * 11, s.y - R - 9, 9, 4);
-      }
+      ctx.fillText(p.name, s.x, s.y - R - 8);
     }
 
     // ===== 屏幕上的 HUD =====
