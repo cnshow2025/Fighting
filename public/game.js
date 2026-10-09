@@ -66,7 +66,7 @@
       case 'state': state = m; break;
       case 'kill': {
         const color = m.killerTeam === 'red' ? '#ff6b6f' : '#6aa8ff';
-        killFeed.push({ text: `${m.killer} 击倒 ${m.victim}（+${m.ammo} 发）`, color, until: Date.now() + 5000 });
+        killFeed.push({ text: `${m.killer} 击倒 ${m.victim}`, color, until: Date.now() + 5000 });
         if (killFeed.length > 4) killFeed.shift();
         break;
       }
@@ -112,18 +112,16 @@
     // 电脑补位 / 难度（只有房主能改）
     const st = lobby.settings;
     const canEdit = isHost && !playing;
-    $('botFill').checked = st.botFill;
-    $('botFill').disabled = !canEdit;
     document.querySelectorAll('.botbox .lv').forEach(b => {
       b.classList.toggle('on', b.dataset.lv === st.difficulty);
       b.disabled = !canEdit && b.dataset.lv !== st.difficulty;
     });
     const red = ps.filter(p => p.team === 'red').length, blue = ps.filter(p => p.team === 'blue').length;
-    const n = Math.max(red, blue, 1);
-    const bots = st.botFill ? (n - red) + (n - blue) : 0;
-    $('botHint').textContent = st.botFill
-      ? (bots ? `开局时会加入 ${bots} 个电脑（红队 ${n - red} 个、蓝队 ${n - blue} 个），变成 ${n}v${n}` : '两队人数一样，不需要电脑')
-      : '打开后，电脑会把人少的一队补到两队人数一样';
+    const n = Math.max(red, blue, lobby.minTeam);
+    const bots = (n - red) + (n - blue);
+    $('botHint').textContent = bots
+      ? `每队至少 ${lobby.minTeam} 人。开局时会加入 ${bots} 个电脑（红队 ${n - red} 个、蓝队 ${n - blue} 个），变成 ${n}v${n}`
+      : `两队人数一样，不需要电脑（${n}v${n}）`;
   }
 
   function esc(s) {
@@ -204,7 +202,6 @@
   $('qrAddr').oninput = drawQR;
   $('qrClose').onclick = () => $('qrModal').classList.remove('show');
 
-  $('botFill').onchange = () => sendMsg({ t: 'settings', botFill: $('botFill').checked });
   document.querySelectorAll('.botbox .lv').forEach(b => {
     b.onclick = () => sendMsg({ t: 'settings', difficulty: b.dataset.lv });
   });
@@ -443,8 +440,8 @@
       ctx.font = 'bold 18px sans-serif';
       ctx.fillStyle = '#fff';
       ctx.fillText(`❤ ${me.hp}/${cfg.maxHp}`, 14, 30);
-      ctx.fillStyle = me.ammo > 0 ? '#ffd166' : '#ff6b6f';
-      ctx.fillText(`子弹 ${me.ammo}`, 14, 56);
+      ctx.fillStyle = '#ffd166';
+      ctx.fillText('子弹 ∞', 14, 56);
       ctx.fillStyle = '#ccc';
       ctx.fillText(`击倒 ${me.kills}`, 14, 82);
       if (!me.alive) {

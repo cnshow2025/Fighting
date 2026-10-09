@@ -17,10 +17,10 @@ const PLAYER_SPEED = 220;     // 像素/秒
 const BULLET_SPEED = 750;     // 像素/秒
 const BULLET_R = 4;
 const MAX_HP = 3;             // 中 3 枪倒下
-const START_AMMO = 30;        // 每人开局子弹
 const FIRE_COOLDOWN = 300;    // 毫秒
 const MATCH_TIME = 180;       // 一局 3 分钟（秒）
 const TEAM_SIZE = 5;
+const MIN_TEAM = 3;           // 每队至少 3 人，不足的用电脑补
 const TICK_RATE = 30;
 
 // ===== 地图遮蔽物（左半边定义，右半边中心对称生成） =====
@@ -79,7 +79,7 @@ let phase = 'lobby';         // lobby | playing | ended
 let bullets = [];
 let timeLeft = 0;
 let lastResult = null;
-const settings = { botFill: false, difficulty: 'normal' };   // 房主设定：电脑补位、难度
+const settings = { difficulty: 'normal' };   // 房主设定：电脑难度
 
 function send(p, msg) {
   if (p.ws.readyState === 1) p.ws.send(JSON.stringify(msg));
@@ -95,6 +95,7 @@ function lobbyInfo() {
     phase,
     hostId,
     teamSize: TEAM_SIZE,
+    minTeam: MIN_TEAM,
     result: lastResult,
     settings,
     players: [...players.values()].filter(p => p.name && !p.isBot).map(p => ({ id: p.id, name: p.name, team: p.team })),
@@ -168,7 +169,7 @@ const BOT_LEVELS = {
 function createBot(team, n) {
   const bot = {
     id: nextId++, ws: { readyState: 0 }, isBot: true, name: '🤖电脑' + n, team,
-    inMatch: false, alive: false, x: 0, y: 0, angle: 0, hp: 0, ammo: 0, kills: 0,
+    inMatch: false, alive: false, x: 0, y: 0, angle: 0, hp: 0, kills: 0,
     input: { mx: 0, my: 0, ax: 0, ay: 0, fire: false },
   };
   players.set(bot.id, bot);
@@ -317,7 +318,7 @@ function botThink(bot, now) {
     if (now >= ai.errAt) { ai.err = (Math.random() * 2 - 1) * lv.aimErr; ai.errAt = now + 300; }
     const ang = Math.atan2(target.y + vy * flight - bot.y, target.x + vx * flight - bot.x) + ai.err;
     aim = { x: Math.cos(ang), y: Math.sin(ang) };
-    fire = bot.ammo > 0 && now - ai.seeSince >= lv.reaction && now - bot.lastShot >= FIRE_COOLDOWN + lv.extraCooldown;
+    fire = now - ai.seeSince >= lv.reaction && now - bot.lastShot >= FIRE_COOLDOWN + lv.extraCooldown;
 
     if (bot.hp <= lv.coverHp) {
       // 血少：躲到掩体后面
@@ -368,14 +369,11 @@ function startMatch() {
   for (const p of [...players.values()]) if (p.isBot) players.delete(p.id);
   const red = [...players.values()].filter(p => p.team === 'red');
   const blue = [...players.values()].filter(p => p.team === 'blue');
-  if (settings.botFill) {
-    // 用电脑把人少的一队补到两队人数一样
-    const target = Math.max(red.length, blue.length, 1);
-    let n = 1;
-    while (red.length < target) red.push(createBot('red', n++));
-    while (blue.length < target) blue.push(createBot('blue', n++));
-  }
-  if (red.length === 0 || blue.length === 0) return false;
+  // 用电脑补位：每队至少 3 人，并且两队人数一样
+  const target = Math.max(red.length, blue.length, MIN_TEAM);
+  let n = 1;
+  while (red.length < target) red.push(createBot('red', n++));
+  while (blue.length < target) blue.push(createBot('blue', n++));
 
   for (const p of players.values()) p.inMatch = false;
   const place = (list, x) => {
@@ -385,7 +383,6 @@ function startMatch() {
       p.y = MAP_H / 2 + (i - (list.length - 1) / 2) * 90;
       p.angle = x < MAP_W / 2 ? 0 : Math.PI;
       p.hp = MAX_HP;
-      p.ammo = START_AMMO;
       p.alive = true;
       p.kills = 0;
       p.lastShot = 0;
@@ -406,7 +403,6 @@ function startMatch() {
     playerR: PLAYER_R, bulletR: BULLET_R, maxHp: MAX_HP,
   });
   broadcastLobby();
-  return true;
 }
 
 function aliveCount(team) {
@@ -457,9 +453,8 @@ function tick(dt) {
 
     if (inp.ax || inp.ay) p.angle = Math.atan2(inp.ay, inp.ax);
 
-    if (inp.fire && p.ammo > 0 && now - p.lastShot >= FIRE_COOLDOWN) {
+    if (inp.fire && now - p.lastShot >= FIRE_COOLDOWN) {   // 子弹无限
       p.lastShot = now;
-      p.ammo--;
       bullets.push({
         x: p.x, y: p.y,
         vx: Math.cos(p.angle) * BULLET_SPEED,
@@ -484,13 +479,8 @@ function tick(dt) {
           if (p.hp <= 0) {
             p.alive = false;
             const killer = players.get(b.owner);
-            const taken = p.ammo;
-            p.ammo = 0;
-            if (killer) {
-              killer.ammo += taken;   // 对方剩下的子弹转到击倒者手上
-              killer.kills++;
-            }
-            broadcast({ t: 'kill', killer: killer ? killer.name : '?', killerTeam: b.team, victim: p.name, ammo: taken });
+            if (killer) killer.kills++;
+            broadcast({ t: 'kill', killer: killer ? killer.name : '?', killerTeam: b.team, victim: p.name });
           }
           break;
         }
@@ -532,7 +522,7 @@ function sendStates() {
     send(v, {
       t: 'state',
       time: Math.max(0, Math.ceil(timeLeft)),
-      me: v.inMatch ? { id: v.id, x: v.x, y: v.y, hp: v.hp, ammo: v.ammo, alive: v.alive, kills: v.kills, team: v.team } : null,
+      me: v.inMatch ? { id: v.id, x: v.x, y: v.y, hp: v.hp, alive: v.alive, kills: v.kills, team: v.team } : null,
       players: list,
       bullets: bl,
       red, blue,
@@ -544,7 +534,7 @@ function sendStates() {
 const wss = new WebSocketServer({ server });
 
 wss.on('connection', ws => {
-  const p = { id: nextId++, ws, name: '', team: null, inMatch: false, alive: false, x: 0, y: 0, angle: 0, hp: 0, ammo: 0, kills: 0, input: { mx: 0, my: 0, ax: 0, ay: 0, fire: false } };
+  const p = { id: nextId++, ws, name: '', team: null, inMatch: false, alive: false, x: 0, y: 0, angle: 0, hp: 0, kills: 0, input: { mx: 0, my: 0, ax: 0, ay: 0, fire: false } };
   players.set(p.id, p);
   send(p, { t: 'welcome', id: p.id });
 
@@ -569,12 +559,11 @@ wss.on('connection', ws => {
       }
       case 'start': {
         if (p.id !== hostId || phase === 'playing') break;
-        if (!startMatch()) send(p, { t: 'error', msg: '红蓝两队都至少要有 1 人才能开始（或打开“电脑补位”）' });
+        startMatch();
         break;
       }
       case 'settings': {
         if (p.id !== hostId || phase === 'playing') break;
-        if (typeof m.botFill === 'boolean') settings.botFill = m.botFill;
         if (BOT_LEVELS[m.difficulty]) settings.difficulty = m.difficulty;
         broadcastLobby();
         break;
