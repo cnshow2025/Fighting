@@ -10,7 +10,7 @@
   let lobby = null;
   let inGame = false;
   let map = null;
-  let cfg = { playerR: 18, bulletR: 4, maxHp: 3 };
+  let cfg = { playerR: 18, bulletR: 4, maxHp: 3, matchTime: 60 };
   let state = null;
   let endResult = null;
   let endTimer = null;
@@ -53,7 +53,7 @@
         break;
       case 'start':
         map = m.map;
-        cfg = { playerR: m.playerR, bulletR: m.bulletR, maxHp: m.maxHp };
+        cfg = { playerR: m.playerR, bulletR: m.bulletR, maxHp: m.maxHp, matchTime: m.matchTime };
         state = null;
         endResult = null;
         shown.clear();
@@ -112,6 +112,8 @@
     // 电脑补位 / 难度（只有房主能改）
     const st = lobby.settings;
     const canEdit = isHost && !playing;
+    $('botFill').checked = st.botFill;
+    $('botFill').disabled = !canEdit;
     document.querySelectorAll('.botbox .lv').forEach(b => {
       b.classList.toggle('on', b.dataset.lv === st.difficulty);
       b.disabled = !canEdit && b.dataset.lv !== st.difficulty;
@@ -119,8 +121,8 @@
     const red = ps.filter(p => p.team === 'red').length, blue = ps.filter(p => p.team === 'blue').length;
     const n = Math.max(red, blue, lobby.minTeam);
     const bots = (n - red) + (n - blue);
-    $('botHint').textContent = bots
-      ? `每队至少 ${lobby.minTeam} 人。开局时会加入 ${bots} 个电脑（红队 ${n - red} 个、蓝队 ${n - blue} 个），变成 ${n}v${n}`
+    $('botHint').textContent = !st.botFill ? '电脑补位已关闭：只有真人对打，两队都至少要有 1 人'
+      : bots ? `每队至少 ${lobby.minTeam} 人。开局时会加入 ${bots} 个电脑（红队 ${n - red} 个、蓝队 ${n - blue} 个），变成 ${n}v${n}`
       : `两队人数一样，不需要电脑（${n}v${n}）`;
   }
 
@@ -155,6 +157,7 @@
     b.onclick = () => sendMsg({ t: 'team', team: b.dataset.team });
   });
   $('startBtn').onclick = () => sendMsg({ t: 'start' });
+  $('botFill').onchange = () => sendMsg({ t: 'settings', botFill: $('botFill').checked });
   // ===== 邀请二维码 =====
   let qrTeam = 'red';
   let addrGuess = null;
@@ -483,7 +486,7 @@
       ctx.arc(s.ox + v.x * STICK_R, s.oy + v.y * STICK_R, 24, 0, Math.PI * 2);
       ctx.fill();
     }
-    if (me && me.alive && sticks.move.id === null && sticks.aim.id === null && state.time > 170) {   // 开局前 10 秒显示操作提示
+    if (me && me.alive && sticks.move.id === null && sticks.aim.id === null && state.time > cfg.matchTime - 10) {   // 开局前 10 秒显示操作提示
       ctx.textAlign = 'center';
       ctx.fillStyle = 'rgba(255,255,255,0.5)';
       ctx.font = '15px sans-serif';

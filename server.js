@@ -18,7 +18,7 @@ const BULLET_SPEED = 750;     // 像素/秒
 const BULLET_R = 4;
 const MAX_HP = 3;             // 中 3 枪倒下
 const FIRE_COOLDOWN = 300;    // 毫秒
-const MATCH_TIME = 180;       // 一局 3 分钟（秒）
+const MATCH_TIME = 60;        // 一局 1 分钟（秒）
 const TEAM_SIZE = 5;
 const MIN_TEAM = 3;           // 每队至少 3 人，不足的用电脑补
 const TICK_RATE = 30;
@@ -79,7 +79,7 @@ let phase = 'lobby';         // lobby | playing | ended
 let bullets = [];
 let timeLeft = 0;
 let lastResult = null;
-const settings = { difficulty: 'normal' };   // 房主设定：电脑难度
+const settings = { botFill: true, difficulty: 'normal' };   // 房主设定：电脑补位、难度
 
 function send(p, msg) {
   if (p.ws.readyState === 1) p.ws.send(JSON.stringify(msg));
@@ -369,11 +369,14 @@ function startMatch() {
   for (const p of [...players.values()]) if (p.isBot) players.delete(p.id);
   const red = [...players.values()].filter(p => p.team === 'red');
   const blue = [...players.values()].filter(p => p.team === 'blue');
-  // 用电脑补位：每队至少 3 人，并且两队人数一样
-  const target = Math.max(red.length, blue.length, MIN_TEAM);
-  let n = 1;
-  while (red.length < target) red.push(createBot('red', n++));
-  while (blue.length < target) blue.push(createBot('blue', n++));
+  if (settings.botFill) {
+    // 用电脑补位：每队至少 3 人，并且两队人数一样
+    const target = Math.max(red.length, blue.length, MIN_TEAM);
+    let n = 1;
+    while (red.length < target) red.push(createBot('red', n++));
+    while (blue.length < target) blue.push(createBot('blue', n++));
+  }
+  if (red.length === 0 || blue.length === 0) return false;
 
   for (const p of players.values()) p.inMatch = false;
   const place = (list, x) => {
@@ -400,9 +403,10 @@ function startMatch() {
   broadcast({
     t: 'start',
     map: { w: MAP_W, h: MAP_H, obstacles: OBSTACLES },
-    playerR: PLAYER_R, bulletR: BULLET_R, maxHp: MAX_HP,
+    playerR: PLAYER_R, bulletR: BULLET_R, maxHp: MAX_HP, matchTime: MATCH_TIME,
   });
   broadcastLobby();
+  return true;
 }
 
 function aliveCount(team) {
@@ -559,11 +563,12 @@ wss.on('connection', ws => {
       }
       case 'start': {
         if (p.id !== hostId || phase === 'playing') break;
-        startMatch();
+        if (!startMatch()) send(p, { t: 'error', msg: '红蓝两队都至少要有 1 人才能开始（或打开“电脑补位”）' });
         break;
       }
       case 'settings': {
         if (p.id !== hostId || phase === 'playing') break;
+        if (typeof m.botFill === 'boolean') settings.botFill = m.botFill;
         if (BOT_LEVELS[m.difficulty]) settings.difficulty = m.difficulty;
         broadcastLobby();
         break;
