@@ -561,6 +561,12 @@ wss.on('connection', ws => {
         broadcastLobby();
         break;
       }
+      case 'leaveTeam': {
+        if (phase === 'playing') break;
+        p.team = null;
+        broadcastLobby();
+        break;
+      }
       case 'start': {
         if (p.id !== hostId || phase === 'playing') break;
         if (!startMatch()) send(p, { t: 'error', msg: '红蓝两队都至少要有 1 人才能开始（或打开“电脑补位”）' });

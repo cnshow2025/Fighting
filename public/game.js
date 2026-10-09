@@ -114,6 +114,8 @@
     $('lobbyHint').textContent = playing ? '游戏进行中，请等待下一局'
       : isHost ? '你是房主，人齐后按“开始游戏”' : '等待房主开始游戏…';
     document.querySelectorAll('.team button').forEach(b => (b.disabled = playing));
+    const mine = ps.find(p => p.id === myId);
+    $('leaveTeamBtn').style.display = mine && mine.team && !playing ? 'block' : 'none';
 
     // 电脑补位 / 难度（只有房主能改）
     const st = lobby.settings;
@@ -168,6 +170,7 @@
     b.onclick = () => sendMsg({ t: 'team', team: b.dataset.team });
   });
   $('startBtn').onclick = () => sendMsg({ t: 'start' });
+  $('leaveTeamBtn').onclick = () => sendMsg({ t: 'leaveTeam' });
   $('restartBtn').onclick = () => sendMsg({ t: 'start' });
   $('backLobbyBtn').onclick = () => {
     inGame = false;
