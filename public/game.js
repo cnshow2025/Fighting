@@ -29,6 +29,9 @@
     $('endPanel').style.display = show ? 'flex' : 'none';
     if (!show) return;
     const isHost = lobby && lobby.hostId === myId;
+    const r = endResult;
+    $('restartBtn').textContent = r.seriesOver ? '再来一场' : r.winner === 'draw' ? '重打这一关' : `下一关：第 ${r.nextLevel} 关`;
+    $('endWait').textContent = r.seriesOver ? '等待房主重新开始…' : '等待房主开始下一关…';
     $('restartBtn').style.display = isHost ? 'block' : 'none';
     $('endWait').style.display = isHost ? 'none' : 'block';
   }
@@ -64,7 +67,8 @@
         break;
       case 'start':
         map = m.map;
-        cfg = { playerR: m.playerR, bulletR: m.bulletR, maxHp: m.maxHp, matchTime: m.matchTime };
+        cfg = { playerR: m.playerR, bulletR: m.bulletR, maxHp: m.maxHp, matchTime: m.matchTime,
+          level: m.level, levelName: m.levelName, score: m.score, introUntil: performance.now() + 2500 };
         state = null;
         endResult = null;
         shown.clear();
@@ -74,6 +78,11 @@
         resize();
         break;
       case 'state': state = m; break;
+      case 'obs': {   // 木箱、沙包被打到
+        const o = map && map.obstacles[m.i];
+        if (o) { o.hp = m.hp; if (m.hp <= 0) o.dead = true; }
+        break;
+      }
       case 'kill': {
         const color = m.killerTeam === 'red' ? '#ff6b6f' : '#6aa8ff';
         killFeed.push({ text: `${m.killer} 击倒 ${m.victim}`, color, until: Date.now() + 5000 });
@@ -91,8 +100,10 @@
   // ===== 大厅 =====
   function resultText(r) {
     if (!r) return '';
-    const w = r.winner === 'red' ? '红队获胜！' : r.winner === 'blue' ? '蓝队获胜！' : '平局';
-    return `${w}（${r.reason}，红 ${r.red} : 蓝 ${r.blue}）`;
+    const sc = `比分 红 ${r.score.red} : 蓝 ${r.score.blue}`;
+    if (r.seriesOver) return `${TEAM_NAME[r.seriesWinner]}赢得整场比赛！（${sc}）`;
+    const w = r.winner === 'draw' ? '平局' : `${TEAM_NAME[r.winner]}获胜`;
+    return `第 ${r.level} 关${w}（${r.reason}，目前${sc}）`;
   }
 
   function renderLobby() {
@@ -117,21 +128,18 @@
     const mine = ps.find(p => p.id === myId);
     $('leaveTeamBtn').style.display = mine && mine.team && !playing ? 'block' : 'none';
 
-    // 电脑补位 / 难度（只有房主能改）
+    // 电脑补位（只有房主能改）
     const st = lobby.settings;
     const canEdit = isHost && !playing;
     $('botFill').checked = st.botFill;
     $('botFill').disabled = !canEdit;
-    document.querySelectorAll('.botbox .lv').forEach(b => {
-      b.classList.toggle('on', b.dataset.lv === st.difficulty);
-      b.disabled = !canEdit && b.dataset.lv !== st.difficulty;
-    });
     const red = ps.filter(p => p.team === 'red').length, blue = ps.filter(p => p.team === 'blue').length;
     const n = Math.max(red, blue, lobby.minTeam);
     const bots = (n - red) + (n - blue);
     $('botHint').textContent = !st.botFill ? '电脑补位已关闭：只有真人对打，两队都至少要有 1 人'
-      : bots ? `每队至少 ${lobby.minTeam} 人。开局时会加入 ${bots} 个电脑（红队 ${n - red} 个、蓝队 ${n - blue} 个），变成 ${n}v${n}`
-      : `两队人数一样，不需要电脑（${n}v${n}）`;
+      : (bots ? `每队至少 ${lobby.minTeam} 人。第 1 关会加入 ${bots} 个电脑（红队 ${n - red} 个、蓝队 ${n - blue} 个），变成 ${n}v${n}`
+        : `两队人数一样，不需要电脑（${n}v${n}）`)
+        + ((red === 0) !== (blue === 0) ? '。第 2、3 关全电脑的那队会多 1 人' : '');
   }
 
   function esc(s) {
@@ -171,7 +179,7 @@
   });
   $('startBtn').onclick = () => sendMsg({ t: 'start' });
   $('leaveTeamBtn').onclick = () => sendMsg({ t: 'leaveTeam' });
-  $('restartBtn').onclick = () => sendMsg({ t: 'start' });
+  $('restartBtn').onclick = () => sendMsg(endResult && !endResult.seriesOver ? { t: 'next' } : { t: 'start' });
   $('backLobbyBtn').onclick = () => {
     inGame = false;
     if (lobby) renderLobby();
@@ -224,10 +232,6 @@
   });
   $('qrAddr').oninput = drawQR;
   $('qrClose').onclick = () => $('qrModal').classList.remove('show');
-
-  document.querySelectorAll('.botbox .lv').forEach(b => {
-    b.onclick = () => sendMsg({ t: 'settings', difficulty: b.dataset.lv });
-  });
 
   // 全屏 + 横屏（手机上体验更好）
   document.addEventListener('click', () => {
@@ -322,6 +326,7 @@
     ctx.fillStyle = 'rgba(0,0,0,0.55)';
     const FAR = 4000;
     for (const o of map.obstacles) {
+      if (o.dead) continue;
       const c = [[o.x, o.y], [o.x + o.w, o.y], [o.x + o.w, o.y + o.h], [o.x, o.y + o.h]];
       for (let i = 0; i < 4; i++) {
         const a = c[i], b = c[(i + 1) % 4];
@@ -340,6 +345,96 @@
     const dx = p[0] - px, dy = p[1] - py;
     const l = Math.hypot(dx, dy) || 1;
     return [p[0] + dx / l * far, p[1] + dy / l * far];
+  }
+
+  // ===== 障碍物的样子 =====
+  function drawObstacle(o) {
+    const { x, y, w, h } = o;
+    if (o.dead) {   // 打坏后留下一点碎屑痕迹
+      ctx.fillStyle = 'rgba(0,0,0,0.18)';
+      ctx.fillRect(x + 4, y + 4, w - 8, h - 8);
+      return;
+    }
+    const horiz = w >= h;
+    if (o.type === 'crate') {             // 木箱
+      ctx.fillStyle = '#9a7442';
+      ctx.fillRect(x, y, w, h);
+      ctx.strokeStyle = '#5e4424';
+      ctx.lineWidth = 4;
+      ctx.strokeRect(x + 2, y + 2, w - 4, h - 4);
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(x + 5, y + 5); ctx.lineTo(x + w - 5, y + h - 5);
+      ctx.moveTo(x + w - 5, y + 5); ctx.lineTo(x + 5, y + h - 5);
+      ctx.stroke();
+    } else if (o.type === 'sandbag') {    // 沙包墙：一排沙包
+      const len = horiz ? w : h, th = horiz ? h : w;
+      const n = Math.max(1, Math.round(len / (th * 1.3))), seg = len / n;
+      ctx.fillStyle = '#6e6448';
+      ctx.fillRect(x, y, w, h);
+      ctx.fillStyle = '#c2b083';
+      ctx.strokeStyle = '#8a7a52';
+      ctx.lineWidth = 2;
+      for (let i = 0; i < n; i++) {
+        const cx = horiz ? x + seg * (i + 0.5) : x + w / 2, cy = horiz ? y + h / 2 : y + seg * (i + 0.5);
+        ctx.beginPath();
+        ctx.ellipse(cx, cy, (horiz ? seg : th) / 2 - 1, (horiz ? th : seg) / 2 - 1, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+      }
+    } else if (o.type === 'wall') {       // 断墙：砖块
+      ctx.fillStyle = '#80838c';
+      ctx.fillRect(x, y, w, h);
+      ctx.strokeStyle = '#5b5e66';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      const bw = 24, bh = 12;
+      if (horiz) {
+        for (let yy = y + bh; yy < y + h; yy += bh) { ctx.moveTo(x, yy); ctx.lineTo(x + w, yy); }
+        for (let yy = y, row = 0; yy < y + h; yy += bh, row++)
+          for (let xx = x + (row % 2 ? bw / 2 : bw); xx < x + w; xx += bw) { ctx.moveTo(xx, yy); ctx.lineTo(xx, Math.min(yy + bh, y + h)); }
+      } else {
+        for (let xx = x + bh; xx < x + w; xx += bh) { ctx.moveTo(xx, y); ctx.lineTo(xx, y + h); }
+        for (let xx = x, col = 0; xx < x + w; xx += bh, col++)
+          for (let yy = y + (col % 2 ? bw / 2 : bw); yy < y + h; yy += bw) { ctx.moveTo(xx, yy); ctx.lineTo(Math.min(xx + bh, x + w), yy); }
+      }
+      ctx.stroke();
+      ctx.strokeStyle = '#4a4c52';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(x + 1, y + 1, w - 2, h - 2);
+    } else {                              // 石头：切角的不规则形状
+      const c = Math.min(w, h) * 0.28;
+      const pts = [[x + c, y], [x + w - c, y], [x + w, y + c], [x + w, y + h - c], [x + w - c, y + h], [x + c, y + h], [x, y + h - c], [x, y + c]];
+      ctx.fillStyle = '#76767a';
+      ctx.strokeStyle = '#4e4e52';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      pts.forEach(([px, py], i) => (i ? ctx.lineTo(px, py) : ctx.moveTo(px, py)));
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = 'rgba(255,255,255,0.12)';
+      ctx.beginPath();
+      ctx.ellipse(x + w * 0.38, y + h * 0.35, w * 0.22, h * 0.16, -0.4, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    // 被打到的木箱、沙包会变暗、出现裂痕
+    if (o.maxHp && o.hp < o.maxHp) {
+      const d = 1 - o.hp / o.maxHp;
+      ctx.fillStyle = `rgba(0,0,0,${0.45 * d})`;
+      ctx.fillRect(x, y, w, h);
+      ctx.strokeStyle = 'rgba(20,10,0,0.8)';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      const cracks = Math.ceil(d * 3);
+      for (let k = 0; k < cracks; k++) {
+        const sx = x + w * (0.2 + 0.3 * ((o.i + k) % 3)), sy = y + h * (0.15 + 0.25 * k);
+        ctx.moveTo(sx, sy);
+        ctx.lineTo(sx + w * 0.15, sy + h * 0.2);
+        ctx.lineTo(sx + w * 0.05, sy + h * 0.35);
+      }
+      ctx.stroke();
+    }
   }
 
   let lastFrame = performance.now();
@@ -397,13 +492,7 @@
     if (meShown && me.alive) drawShadows(meShown.x, meShown.y);
 
     // 遮蔽物
-    for (const o of map.obstacles) {
-      ctx.fillStyle = '#7a6448';
-      ctx.fillRect(o.x, o.y, o.w, o.h);
-      ctx.strokeStyle = '#4a3a28';
-      ctx.lineWidth = 3;
-      ctx.strokeRect(o.x + 1.5, o.y + 1.5, o.w - 3, o.h - 3);
-    }
+    for (const o of map.obstacles) drawObstacle(o);
     ctx.strokeStyle = '#555';
     ctx.lineWidth = 4;
     ctx.strokeRect(0, 0, map.w, map.h);
@@ -478,6 +567,11 @@
     ctx.fillText(`红 ${state.red}`, vw / 2 - 80, 30 + safe.top);
     ctx.fillStyle = TEAM_COLOR.blue;
     ctx.fillText(`蓝 ${state.blue}`, vw / 2 + 80, 30 + safe.top);
+    if (cfg.level) {   // 关卡和比分
+      ctx.font = '14px sans-serif';
+      ctx.fillStyle = '#ddd';
+      ctx.fillText(`第 ${cfg.level} 关 · ${cfg.levelName}　比分 红 ${cfg.score.red} : 蓝 ${cfg.score.blue}`, vw / 2, 52 + safe.top);
+    }
 
     if (me) {
       ctx.textAlign = 'left';
@@ -534,18 +628,47 @@
       ctx.fillText('左边拖动移动　　右边拖动瞄准开火', vw / 2, vh - 20 - safe.bottom);
     }
 
+    // 开局显示关卡名称
+    if (!endResult && cfg.introUntil && now < cfg.introUntil) {
+      ctx.globalAlpha = Math.min(1, (cfg.introUntil - now) / 600);
+      ctx.textAlign = 'center';
+      ctx.fillStyle = '#fff';
+      ctx.font = 'bold 42px sans-serif';
+      ctx.fillText(`第 ${cfg.level} 关 · ${cfg.levelName}`, vw / 2, vh / 2 - 60);
+      ctx.font = '18px sans-serif';
+      ctx.fillText(`三战两胜　目前比分 红 ${cfg.score.red} : 蓝 ${cfg.score.blue}`, vw / 2, vh / 2 - 28);
+      ctx.globalAlpha = 1;
+    }
+
     // 结算
     if (endResult) {
       ctx.fillStyle = 'rgba(0,0,0,0.6)';
       ctx.fillRect(0, 0, vw, vh);
       ctx.textAlign = 'center';
       const r = endResult;
-      ctx.fillStyle = r.winner === 'red' ? TEAM_COLOR.red : r.winner === 'blue' ? TEAM_COLOR.blue : '#fff';
-      ctx.font = 'bold 40px sans-serif';
-      ctx.fillText(r.winner === 'red' ? '红队获胜！' : r.winner === 'blue' ? '蓝队获胜！' : '平局', vw / 2, vh / 2 - 10);
+      const sc = `比分 红 ${r.score.red} : 蓝 ${r.score.blue}`;
+      let title, color, sub;
+      if (r.seriesOver) {
+        title = `${TEAM_NAME[r.seriesWinner]}赢得整场比赛！`;
+        color = TEAM_COLOR[r.seriesWinner];
+        sub = `第 ${r.level} 关：${r.reason}`;
+      } else if (r.winner === 'draw') {
+        title = `第 ${r.level} 关平局`;
+        color = '#fff';
+        sub = `${r.reason}，不计分，重打这一关`;
+      } else {
+        title = `第 ${r.level} 关 ${TEAM_NAME[r.winner]}获胜！`;
+        color = TEAM_COLOR[r.winner];
+        sub = r.reason;
+      }
+      ctx.fillStyle = color;
+      ctx.font = 'bold 38px sans-serif';
+      ctx.fillText(title, vw / 2, vh / 2 - 30);
       ctx.fillStyle = '#fff';
-      ctx.font = '18px sans-serif';
-      ctx.fillText(`${r.reason}（红 ${r.red} : 蓝 ${r.blue}）`, vw / 2, vh / 2 + 30);
+      ctx.font = '17px sans-serif';
+      ctx.fillText(sub, vw / 2, vh / 2 + 4);
+      ctx.font = 'bold 20px sans-serif';
+      ctx.fillText(sc, vw / 2, vh / 2 + 36);
     }
   }
   requestAnimationFrame(frame);

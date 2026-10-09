@@ -23,22 +23,39 @@ const TEAM_SIZE = 5;
 const MIN_TEAM = 3;           // 每队至少 3 人，不足的用电脑补
 const TICK_RATE = 30;
 
-// ===== 地图遮蔽物（左半边定义，右半边中心对称生成） =====
-const HALF_OBSTACLES = [
-  { x: 150, y: 450, w: 80, h: 100 },
-  { x: 320, y: 150, w: 60, h: 200 },
-  { x: 320, y: 650, w: 60, h: 200 },
-  { x: 540, y: 60, w: 180, h: 50 },
-  { x: 540, y: 890, w: 180, h: 50 },
-  { x: 520, y: 430, w: 110, h: 140 },
-  { x: 470, y: 260, w: 50, h: 90 },
-  { x: 470, y: 650, w: 50, h: 90 },
+const WIN_ROUNDS = 2;          // 三战两胜
+
+// ===== 三个关卡（左半边定义，右半边中心对称生成） =====
+// 障碍物种类：crate 木箱、sandbag 沙包（可以打坏）；wall 断墙、rock 石头（打不坏）
+const OBSTACLE_HP = { crate: 4, sandbag: 6, wall: 0, rock: 0 };
+const C = (x, y, w, h) => ({ type: 'crate', x, y, w, h });
+const S = (x, y, w, h) => ({ type: 'sandbag', x, y, w, h });
+const W = (x, y, w, h) => ({ type: 'wall', x, y, w, h });
+const R = (x, y, w, h) => ({ type: 'rock', x, y, w, h });
+
+const LEVELS = [
+  { name: '仓库', difficulty: 'easy',      // 掩体多，好躲
+    center: [C(768, 468, 64, 64)],
+    half: [S(150, 420, 36, 160), C(230, 180, 64, 64), C(230, 756, 64, 64), C(360, 320, 72, 72), C(360, 608, 72, 72),
+      S(470, 110, 170, 36), S(470, 854, 170, 36), C(520, 460, 64, 64), C(640, 260, 64, 64), C(640, 676, 64, 64), S(600, 340, 36, 100)] },
+  { name: '废墟', difficulty: 'normal',    // 断墙为主，缺口可以穿过
+    center: [W(788, 300, 24, 150), W(788, 550, 24, 150)],
+    half: [W(200, 250, 24, 150), W(200, 250, 140, 24), W(200, 600, 24, 150), W(200, 726, 140, 24),
+      W(430, 170, 120, 24), W(610, 170, 120, 24), W(430, 806, 120, 24), W(610, 806, 120, 24),
+      C(470, 460, 64, 64), R(600, 380, 70, 60), S(620, 560, 36, 100)] },
+  { name: '荒野', difficulty: 'hard',      // 掩体少，很开阔
+    center: [R(760, 460, 80, 80)],
+    half: [R(260, 300, 70, 60), R(260, 640, 70, 60), R(560, 170, 80, 70), R(560, 760, 80, 70), S(600, 450, 36, 100)] },
 ];
-const OBSTACLES = [{ x: 760, y: 410, w: 80, h: 180 }];
-for (const o of HALF_OBSTACLES) {
-  OBSTACLES.push(o);
-  OBSTACLES.push({ x: MAP_W - o.x - o.w, y: MAP_H - o.y - o.h, w: o.w, h: o.h });
+
+function buildObstacles(level) {
+  const list = [...level.center];
+  for (const o of level.half) list.push(o, { ...o, x: MAP_W - o.x - o.w, y: MAP_H - o.y - o.h });
+  return list.map((o, i) => ({ ...o, i, hp: OBSTACLE_HP[o.type], maxHp: OBSTACLE_HP[o.type], dead: false }));
 }
+
+let obstacles = [];   // 本局全部障碍物（含已打坏的）
+let solid = [];       // 还没被打坏的障碍物
 
 // ===== 静态文件服务 =====
 const PUBLIC_DIR = path.join(__dirname, 'public');
@@ -79,7 +96,8 @@ let phase = 'lobby';         // lobby | playing | ended
 let bullets = [];
 let timeLeft = 0;
 let lastResult = null;
-const settings = { botFill: true, difficulty: 'normal' };   // 房主设定：电脑补位、难度
+const settings = { botFill: true };   // 房主设定：电脑补位
+let series = null;                    // 三战两胜：{ level, score: { red, blue } }
 
 function send(p, msg) {
   if (p.ws.readyState === 1) p.ws.send(JSON.stringify(msg));
@@ -116,26 +134,27 @@ function circleHitsRect(cx, cy, r, o) {
   return dx * dx + dy * dy < r * r;
 }
 
-// 线段与矩形相交（Liang-Barsky）
-function segHitsRect(x1, y1, x2, y2, o) {
+// 线段与矩形相交（Liang-Barsky）：返回进入矩形的位置 0~1，没碰到返回 -1
+function segEnterT(x1, y1, x2, y2, o) {
   let t0 = 0, t1 = 1;
   const dx = x2 - x1, dy = y2 - y1;
   const p = [-dx, dx, -dy, dy];
   const q = [x1 - o.x, o.x + o.w - x1, y1 - o.y, o.y + o.h - y1];
   for (let i = 0; i < 4; i++) {
     if (p[i] === 0) {
-      if (q[i] < 0) return false;
+      if (q[i] < 0) return -1;
     } else {
       const t = q[i] / p[i];
-      if (p[i] < 0) { if (t > t1) return false; if (t > t0) t0 = t; }
-      else { if (t < t0) return false; if (t < t1) t1 = t; }
+      if (p[i] < 0) { if (t > t1) return -1; if (t > t0) t0 = t; }
+      else { if (t < t0) return -1; if (t < t1) t1 = t; }
     }
   }
-  return true;
+  return t0;
 }
+const segHitsRect = (x1, y1, x2, y2, o) => segEnterT(x1, y1, x2, y2, o) >= 0;
 
 function lineClear(x1, y1, x2, y2) {
-  for (const o of OBSTACLES) if (segHitsRect(x1, y1, x2, y2, o)) return false;
+  for (const o of solid) if (segHitsRect(x1, y1, x2, y2, o)) return false;
   return true;
 }
 
@@ -189,11 +208,13 @@ function newBotBrain() {
 const CELL = 25;
 const COLS = Math.ceil(MAP_W / CELL), ROWS = Math.ceil(MAP_H / CELL);
 const blocked = new Uint8Array(COLS * ROWS);
-for (let r = 0; r < ROWS; r++) {
-  for (let c = 0; c < COLS; c++) {
-    const x = c * CELL + CELL / 2, y = r * CELL + CELL / 2;
-    blocked[r * COLS + c] = (x < PLAYER_R || y < PLAYER_R || x > MAP_W - PLAYER_R || y > MAP_H - PLAYER_R ||
-      OBSTACLES.some(o => circleHitsRect(x, y, PLAYER_R + 3, o))) ? 1 : 0;
+function buildGrid() {   // 换关卡或掩体被打坏时重算
+  for (let r = 0; r < ROWS; r++) {
+    for (let c = 0; c < COLS; c++) {
+      const x = c * CELL + CELL / 2, y = r * CELL + CELL / 2;
+      blocked[r * COLS + c] = (x < PLAYER_R || y < PLAYER_R || x > MAP_W - PLAYER_R || y > MAP_H - PLAYER_R ||
+        solid.some(o => circleHitsRect(x, y, PLAYER_R + 3, o))) ? 1 : 0;
+    }
   }
 }
 const cellOf = (x, y) => [Math.max(0, Math.min(COLS - 1, Math.floor(x / CELL))), Math.max(0, Math.min(ROWS - 1, Math.floor(y / CELL)))];
@@ -292,7 +313,7 @@ function goTo(bot, ai, now, x, y) {
 
 function botThink(bot, now) {
   const ai = bot.ai;
-  const lv = BOT_LEVELS[settings.difficulty];
+  const lv = BOT_LEVELS[LEVELS[series.level].difficulty];   // 电脑难度随关卡提升
   let move = { x: 0, y: 0 }, aim = null, fire = false;
 
   // 找视线内最近的敌人
@@ -365,18 +386,35 @@ function botThink(bot, now) {
 }
 
 // ===== 开始 / 结束 =====
-function startMatch() {
+// 一场比赛：第 1 局在第 1 关、第 2 局在第 2 关……先赢 2 局的队获胜；平局重打同一关
+function startSeries() {
+  const prev = series;
+  series = { level: 0, score: { red: 0, blue: 0 } };
+  if (!startRound()) { series = prev; return false; }
+  return true;
+}
+
+function startRound() {
+  const level = LEVELS[series.level];
   for (const p of [...players.values()]) if (p.isBot) players.delete(p.id);
   const red = [...players.values()].filter(p => p.team === 'red');
   const blue = [...players.values()].filter(p => p.team === 'blue');
   if (settings.botFill) {
     // 用电脑补位：每队至少 3 人，并且两队人数一样
     const target = Math.max(red.length, blue.length, MIN_TEAM);
+    // 第 2、3 关：全是电脑的那一队多 1 人
+    const extra = series.level >= 1 ? 1 : 0;
+    const redTarget = Math.min(TEAM_SIZE, target + (red.length === 0 && blue.length > 0 ? extra : 0));
+    const blueTarget = Math.min(TEAM_SIZE, target + (blue.length === 0 && red.length > 0 ? extra : 0));
     let n = 1;
-    while (red.length < target) red.push(createBot('red', n++));
-    while (blue.length < target) blue.push(createBot('blue', n++));
+    while (red.length < redTarget) red.push(createBot('red', n++));
+    while (blue.length < blueTarget) blue.push(createBot('blue', n++));
   }
   if (red.length === 0 || blue.length === 0) return false;
+
+  obstacles = buildObstacles(level);
+  solid = obstacles.slice();
+  buildGrid();
 
   for (const p of players.values()) p.inMatch = false;
   const place = (list, x) => {
@@ -402,8 +440,9 @@ function startMatch() {
   phase = 'playing';
   broadcast({
     t: 'start',
-    map: { w: MAP_W, h: MAP_H, obstacles: OBSTACLES },
+    map: { w: MAP_W, h: MAP_H, obstacles },
     playerR: PLAYER_R, bulletR: BULLET_R, maxHp: MAX_HP, matchTime: MATCH_TIME,
+    level: series.level + 1, levelName: level.name, difficulty: level.difficulty, score: series.score,
   });
   broadcastLobby();
   return true;
@@ -417,7 +456,17 @@ function aliveCount(team) {
 
 function endMatch(winner, reason) {
   phase = 'ended';
-  lastResult = { winner, reason, red: aliveCount('red'), blue: aliveCount('blue') };
+  const played = series.level;
+  if (winner !== 'draw') series.score[winner]++;
+  const seriesOver = series.score.red >= WIN_ROUNDS || series.score.blue >= WIN_ROUNDS;
+  if (winner !== 'draw' && !seriesOver) series.level++;
+  lastResult = {
+    winner, reason, red: aliveCount('red'), blue: aliveCount('blue'),
+    level: played + 1, levelName: LEVELS[played].name,
+    score: { ...series.score }, seriesOver,
+    seriesWinner: seriesOver ? (series.score.red > series.score.blue ? 'red' : 'blue') : null,
+    nextLevel: series.level + 1, nextLevelName: LEVELS[series.level].name,
+  };
   broadcast({ t: 'end', result: lastResult });
   broadcastLobby();
 }
@@ -451,9 +500,9 @@ function tick(dt) {
     if (ml > 1) { mx /= ml; my /= ml; }
 
     const nx = Math.max(PLAYER_R, Math.min(MAP_W - PLAYER_R, p.x + mx * PLAYER_SPEED * dt));
-    if (!OBSTACLES.some(o => circleHitsRect(nx, p.y, PLAYER_R, o))) p.x = nx;
+    if (!solid.some(o => circleHitsRect(nx, p.y, PLAYER_R, o))) p.x = nx;
     const ny = Math.max(PLAYER_R, Math.min(MAP_H - PLAYER_R, p.y + my * PLAYER_SPEED * dt));
-    if (!OBSTACLES.some(o => circleHitsRect(p.x, ny, PLAYER_R, o))) p.y = ny;
+    if (!solid.some(o => circleHitsRect(p.x, ny, PLAYER_R, o))) p.y = ny;
 
     if (inp.ax || inp.ay) p.angle = Math.atan2(inp.ay, inp.ax);
 
@@ -472,7 +521,14 @@ function tick(dt) {
   const kept = [];
   for (const b of bullets) {
     const x2 = b.x + b.vx * dt, y2 = b.y + b.vy * dt;
-    let gone = x2 < 0 || y2 < 0 || x2 > MAP_W || y2 > MAP_H || !lineClear(b.x, b.y, x2, y2);
+    // 先找子弹最先打到的障碍物
+    let hitObs = null, hitT = Infinity;
+    for (const o of solid) {
+      const t = segEnterT(b.x, b.y, x2, y2, o);
+      if (t >= 0 && t < hitT) { hitT = t; hitObs = o; }
+    }
+    if (hitObs) damageObstacle(hitObs);
+    let gone = x2 < 0 || y2 < 0 || x2 > MAP_W || y2 > MAP_H || !!hitObs;
     if (!gone) {
       for (const p of players.values()) {
         if (!p.inMatch || !p.alive || p.team === b.team) continue;
@@ -496,6 +552,19 @@ function tick(dt) {
 
   checkWin();
   if (phase === 'playing') sendStates();
+}
+
+// 木箱、沙包被打几枪会碎掉
+function damageObstacle(o) {
+  if (!o.maxHp) return;
+  o.hp--;
+  if (o.hp <= 0) {
+    o.dead = true;
+    solid = obstacles.filter(q => !q.dead);
+    buildGrid();
+    for (const p of players.values()) if (p.isBot && p.ai) p.ai.replanAt = 0;
+  }
+  broadcast({ t: 'obs', i: o.i, hp: o.hp });
 }
 
 // 每个人只收到他能看到的敌人（防偷看）
@@ -569,13 +638,17 @@ wss.on('connection', ws => {
       }
       case 'start': {
         if (p.id !== hostId || phase === 'playing') break;
-        if (!startMatch()) send(p, { t: 'error', msg: '红蓝两队都至少要有 1 人才能开始（或打开“电脑补位”）' });
+        if (!startSeries()) send(p, { t: 'error', msg: '红蓝两队都至少要有 1 人才能开始（或打开“电脑补位”）' });
+        break;
+      }
+      case 'next': {   // 下一关（或平局重打这一关）
+        if (p.id !== hostId || phase !== 'ended' || !series || (lastResult && lastResult.seriesOver)) break;
+        if (!startRound()) send(p, { t: 'error', msg: '红蓝两队都至少要有 1 人才能开始（或打开“电脑补位”）' });
         break;
       }
       case 'settings': {
         if (p.id !== hostId || phase === 'playing') break;
         if (typeof m.botFill === 'boolean') settings.botFill = m.botFill;
-        if (BOT_LEVELS[m.difficulty]) settings.difficulty = m.difficulty;
         broadcastLobby();
         break;
       }

@@ -34,8 +34,6 @@
   .botbox { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 10px; background: #1f232c; border-radius: 12px; padding: 10px 14px; width: min(560px, 95vw); }
   .botbox label { font-size: 16px; display: flex; align-items: center; gap: 6px; }
   .botbox input[type=checkbox] { width: 22px; height: 22px; }
-  .botbox .lv { font-size: 15px; padding: 8px 14px; background: #333; }
-  .botbox .lv.on { background: #f0a020; color: #111; }
   #result { font-size: 26px; font-weight: bold; text-align: center; }
   #canvas { position: fixed; inset: 0; width: 100vw; height: 100vh; display: none; touch-action: none; }
   #inviteBanner { display: none; font-size: 20px; font-weight: bold; padding: 8px 18px; border-radius: 10px; }
@@ -51,7 +49,7 @@
   .qrbox .small { font-size: 13px; color: #555; text-align: center; max-width: 300px; }
   #iosHint { display: none; background: #2a3a55; color: #dde6ff; border-radius: 10px; padding: 10px 14px; font-size: 14px; text-align: center; max-width: min(320px, 90vw); line-height: 1.5; }
   #safeArea { position: fixed; visibility: hidden; pointer-events: none; padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
-  #endPanel { position: fixed; left: 0; right: 0; top: calc(50% + 60px); display: none; flex-direction: column; align-items: center; gap: 10px; z-index: 5; }
+  #endPanel { position: fixed; left: 0; right: 0; top: calc(50% + 64px); display: none; flex-direction: column; align-items: center; gap: 10px; z-index: 5; }
   #endPanel .row { display: flex; gap: 12px; }
   #restartBtn { background: #22a55b; font-size: 20px; padding: 12px 26px; }
   #backLobbyBtn { background: #555; }
@@ -88,10 +86,7 @@
   <button id="leaveTeamBtn" style="display:none; background:#555; font-size:16px; padding:8px 18px">退出队伍</button>
   <div class="botbox">
     <label><input type="checkbox" id="botFill">电脑补位</label>
-    <span>电脑难度：</span>
-    <button class="lv" data-lv="easy">简单</button>
-    <button class="lv" data-lv="normal">普通</button>
-    <button class="lv" data-lv="hard">困难</button>
+    <span>电脑难度随关卡提升：第 1 关简单 → 第 2 关普通 → 第 3 关困难</span>
     <div class="hint" id="botHint" style="width:100%"></div>
   </div>
   <div class="invites" id="invites">
@@ -100,7 +95,7 @@
   </div>
   <button id="startBtn" style="display:none">开始游戏</button>
   <div class="hint" id="lobbyHint"></div>
-  <div class="hint">玩法：左半屏拖动 = 移动；右半屏拖动 = 瞄准并开火<br>躲在遮蔽物后面敌人看不到你。子弹无限。<br>1 分钟后存活人数多的一队获胜，或先全灭对方获胜。<br>打开“电脑补位”时，每队至少 3 人，人数不够由电脑补上。</div>
+  <div class="hint">玩法：左半屏拖动 = 移动；右半屏拖动 = 瞄准并开火<br>躲在遮蔽物后面敌人看不到你。子弹无限。<br>三关三战两胜：第 1 关仓库 → 第 2 关废墟 → 第 3 关荒野，先赢 2 关的队获胜。<br>每关 1 分钟，存活人数多或先全灭对方就赢这一关；平局重打。木箱、沙包会被打坏。<br>打开“电脑补位”时，每队至少 3 人，人数不够由电脑补上。</div>
 </div>
 
 <div id="qrModal">
