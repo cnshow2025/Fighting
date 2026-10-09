@@ -516,7 +516,7 @@ function sendStates() {
       if (!p.inMatch) continue;
       const friendly = v.inMatch && p.team === v.team;
       if (friendly || (p.alive && seen(p.x, p.y, p))) {
-        list.push({ id: p.id, name: p.name, team: p.team, x: Math.round(p.x), y: Math.round(p.y), a: +p.angle.toFixed(2), hp: p.hp, alive: p.alive });
+        list.push({ id: p.id, name: p.name, team: p.team, x: Math.round(p.x), y: Math.round(p.y), a: +p.angle.toFixed(2), hp: p.hp, alive: p.alive, bot: !!p.isBot });
       }
     }
     const bl = [];

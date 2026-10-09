@@ -446,7 +446,7 @@
       ctx.lineWidth = me && p.id === me.id ? 3 : 2;
       ctx.stroke();
       ctx.fillStyle = '#fff';
-      ctx.font = 'bold 13px sans-serif';
+      ctx.font = p.bot ? 'bold 13px sans-serif' : 'bold 18px sans-serif';   // 真人名字大一点
       ctx.textAlign = 'center';
       ctx.fillText(p.name, s.x, s.y - R - 8);
     }
