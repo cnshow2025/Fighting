@@ -1,0 +1,12 @@
+{
+  "name": "fighting",
+  "version": "1.0.0",
+  "description": "局域网 5v5 掩体射击网页游戏（手机热点即可联机）",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  }
+}

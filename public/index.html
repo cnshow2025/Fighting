@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<title>掩体对战 5v5</title>
+<style>
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; user-select: none; -webkit-user-select: none; }
+  html, body { margin: 0; height: 100%; background: #14161c; color: #eee; font-family: system-ui, -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif; overflow: hidden; touch-action: none; }
+  .screen { position: fixed; inset: 0; display: none; flex-direction: column; align-items: center; justify-content: flex-start; padding: 16px; gap: 14px; overflow-y: auto; touch-action: pan-y; }
+  .screen.show { display: flex; }
+  .screen > :first-child { margin-top: auto; }
+  .screen > :last-child { margin-bottom: auto; }
+  h1 { margin: 0; font-size: 28px; letter-spacing: 2px; }
+  input { font-size: 18px; padding: 12px; border-radius: 10px; border: 1px solid #555; background: #222; color: #fff; width: min(280px, 90vw); text-align: center; user-select: text; -webkit-user-select: text; }
+  button { font-size: 18px; padding: 12px 22px; border-radius: 10px; border: none; background: #3a7bd5; color: #fff; font-weight: bold; }
+  button:active { transform: scale(0.97); }
+  button:disabled { background: #555; color: #999; }
+  .teams { display: flex; gap: 12px; width: min(560px, 95vw); }
+  .team { flex: 1; border-radius: 12px; padding: 10px; min-height: 180px; }
+  .team.red { background: #4a1f24; border: 2px solid #e5484d; }
+  .team.blue { background: #1c2c4a; border: 2px solid #3e8ef7; }
+  .team h2 { margin: 0 0 8px; font-size: 18px; display: flex; justify-content: space-between; }
+  .team ul { list-style: none; padding: 0; margin: 0 0 10px; min-height: 100px; }
+  .team li { padding: 4px 0; font-size: 16px; }
+  .team li.me { font-weight: bold; text-decoration: underline; }
+  .team button { width: 100%; font-size: 16px; padding: 10px; }
+  .team.red button { background: #e5484d; }
+  .team.blue button { background: #3e8ef7; }
+  .hint { color: #aaa; font-size: 14px; text-align: center; }
+  #result { font-size: 26px; font-weight: bold; text-align: center; }
+  #canvas { position: fixed; inset: 0; width: 100vw; height: 100vh; display: none; touch-action: none; }
+  #toast { position: fixed; top: 20px; left: 50%; transform: translateX(-50%); background: #c33; padding: 8px 16px; border-radius: 8px; display: none; z-index: 10; }
+</style>
+</head>
+<body>
+
+<div id="joinScreen" class="screen show">
+  <h1>掩体对战 5v5</h1>
+  <input id="nameInput" maxlength="12" placeholder="输入你的名字">
+  <button id="joinBtn">进入大厅</button>
+  <div class="hint">所有人连同一个热点，打开同一个网址即可</div>
+</div>
+
+<div id="lobbyScreen" class="screen">
+  <h1>大厅</h1>
+  <div id="result"></div>
+  <div class="teams">
+    <div class="team red">
+      <h2><span>红队</span><span id="redCount">0/5</span></h2>
+      <ul id="redList"></ul>
+      <button data-team="red">加入红队</button>
+    </div>
+    <div class="team blue">
+      <h2><span>蓝队</span><span id="blueCount">0/5</span></h2>
+      <ul id="blueList"></ul>
+      <button data-team="blue">加入蓝队</button>
+    </div>
+  </div>
+  <div class="hint" id="waitingList"></div>
+  <button id="startBtn" style="display:none">开始游戏</button>
+  <div class="hint" id="lobbyHint"></div>
+  <div class="hint">玩法：左半屏拖动 = 移动；右半屏拖动 = 瞄准并开火<br>躲在遮蔽物后面敌人看不到你。击倒敌人可拿走他剩下的子弹。<br>3 分钟后存活人数多的一队获胜，或先全灭对方获胜。</div>
+</div>
+
+<canvas id="canvas"></canvas>
+<div id="toast"></div>
+
+<script src="game.js"></script>
+</body>
+</html>
