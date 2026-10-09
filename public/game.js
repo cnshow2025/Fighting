@@ -142,6 +142,11 @@
     $('joinBtn').textContent = `加入${TEAM_NAME[invitedTeam]}`;
   }
 
+  // iPhone / iPad 的 Safari 不能自动全屏，提示加到主屏幕
+  const isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  const standalone = navigator.standalone === true || (window.matchMedia && matchMedia('(display-mode: standalone)').matches);
+  if (isIOS && !standalone) $('iosHint').style.display = 'block';
+
   try { $('nameInput').value = localStorage.getItem('name') || ''; } catch {}
   $('joinBtn').onclick = () => {
     myName = $('nameInput').value.trim() || '玩家';
@@ -276,7 +281,16 @@
 
   // ===== 绘图 =====
   let dpr = 1, vw = 0, vh = 0;
+  // iPhone 刘海 / 动态岛等安全区域，HUD 文字要避开
+  let safe = { top: 0, right: 0, bottom: 0, left: 0 };
+  function readSafeArea() {
+    const cs = getComputedStyle($('safeArea'));
+    safe = { top: parseFloat(cs.paddingTop) || 0, right: parseFloat(cs.paddingRight) || 0,
+      bottom: parseFloat(cs.paddingBottom) || 0, left: parseFloat(cs.paddingLeft) || 0 };
+  }
+
   function resize() {
+    readSafeArea();
     dpr = window.devicePixelRatio || 1;
     vw = window.innerWidth;
     vh = window.innerHeight;
@@ -443,44 +457,44 @@
     ctx.font = 'bold 22px sans-serif';
     const mm = Math.floor(state.time / 60), ss = String(state.time % 60).padStart(2, '0');
     ctx.fillStyle = state.time <= 30 ? '#ff6b6f' : '#fff';
-    ctx.fillText(`${mm}:${ss}`, vw / 2, 30);
+    ctx.fillText(`${mm}:${ss}`, vw / 2, 30 + safe.top);
     ctx.font = 'bold 18px sans-serif';
     ctx.fillStyle = TEAM_COLOR.red;
-    ctx.fillText(`红 ${state.red}`, vw / 2 - 80, 30);
+    ctx.fillText(`红 ${state.red}`, vw / 2 - 80, 30 + safe.top);
     ctx.fillStyle = TEAM_COLOR.blue;
-    ctx.fillText(`蓝 ${state.blue}`, vw / 2 + 80, 30);
+    ctx.fillText(`蓝 ${state.blue}`, vw / 2 + 80, 30 + safe.top);
 
     if (me) {
       ctx.textAlign = 'left';
       ctx.font = 'bold 18px sans-serif';
       ctx.fillStyle = '#fff';
-      ctx.fillText(`❤ ${me.hp}/${cfg.maxHp}`, 14, 30);
+      ctx.fillText(`❤ ${me.hp}/${cfg.maxHp}`, 14 + safe.left, 30 + safe.top);
       ctx.fillStyle = '#ffd166';
-      ctx.fillText('子弹 ∞', 14, 56);
+      ctx.fillText('子弹 ∞', 14 + safe.left, 56 + safe.top);
       ctx.fillStyle = '#ccc';
-      ctx.fillText(`击倒 ${me.kills}`, 14, 82);
+      ctx.fillText(`击倒 ${me.kills}`, 14 + safe.left, 82 + safe.top);
       if (!me.alive) {
         ctx.textAlign = 'center';
         ctx.fillStyle = '#ff6b6f';
         ctx.font = 'bold 20px sans-serif';
-        ctx.fillText('你已倒下 —— 正在观看队友视野', vw / 2, vh - 24);
+        ctx.fillText('你已倒下 —— 正在观看队友视野', vw / 2, vh - 24 - safe.bottom);
       }
     } else {
       ctx.textAlign = 'center';
       ctx.fillStyle = '#ccc';
       ctx.font = '16px sans-serif';
-      ctx.fillText('旁观中', vw / 2, vh - 20);
+      ctx.fillText('旁观中', vw / 2, vh - 20 - safe.bottom);
     }
 
     // 击倒消息
     ctx.textAlign = 'right';
     ctx.font = '14px sans-serif';
-    let fy = 24;
+    let fy = 24 + safe.top;
     const t = Date.now();
     for (const k of killFeed) {
       if (k.until < t) continue;
       ctx.fillStyle = k.color;
-      ctx.fillText(k.text, vw - 12, fy);
+      ctx.fillText(k.text, vw - 12 - safe.right, fy);
       fy += 20;
     }
 
@@ -502,7 +516,7 @@
       ctx.textAlign = 'center';
       ctx.fillStyle = 'rgba(255,255,255,0.5)';
       ctx.font = '15px sans-serif';
-      ctx.fillText('左边拖动移动　　右边拖动瞄准开火', vw / 2, vh - 20);
+      ctx.fillText('左边拖动移动　　右边拖动瞄准开火', vw / 2, vh - 20 - safe.bottom);
     }
 
     // 结算
