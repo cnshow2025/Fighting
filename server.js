@@ -187,7 +187,7 @@ const BOT_LEVELS = {
 
 function createBot(team, n) {
   const bot = {
-    id: nextId++, ws: { readyState: 0 }, isBot: true, name: '🤖电脑' + n, team,
+    id: nextId++, ws: { readyState: 0 }, isBot: true, name: (team === 'red' ? '🤖红电' : '🤖蓝电') + n, team,
     inMatch: false, alive: false, x: 0, y: 0, angle: 0, hp: 0, kills: 0,
     input: { mx: 0, my: 0, ax: 0, ay: 0, fire: false },
   };
@@ -406,9 +406,9 @@ function startRound() {
     const extra = series.level >= 1 ? 1 : 0;
     const redTarget = Math.min(TEAM_SIZE, target + (red.length === 0 && blue.length > 0 ? extra : 0));
     const blueTarget = Math.min(TEAM_SIZE, target + (blue.length === 0 && red.length > 0 ? extra : 0));
-    let n = 1;
-    while (red.length < redTarget) red.push(createBot('red', n++));
-    while (blue.length < blueTarget) blue.push(createBot('blue', n++));
+    // 电脑名字每队各自编号：🤖红电1、🤖蓝电1……
+    for (let n = 1; red.length < redTarget; n++) red.push(createBot('red', n));
+    for (let n = 1; blue.length < blueTarget; n++) blue.push(createBot('blue', n));
   }
   if (red.length === 0 || blue.length === 0) return false;
 
