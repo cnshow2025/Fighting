@@ -13,7 +13,6 @@
   let cfg = { playerR: 18, bulletR: 4, maxHp: 3, matchTime: 60 };
   let state = null;
   let endResult = null;
-  let endTimer = null;
   const shown = new Map();   // id -> 平滑显示用的位置
   const killFeed = [];       // { text, color, until }
 
@@ -21,6 +20,17 @@
   function showScreen(name) {
     for (const s of ['joinScreen', 'lobbyScreen']) $(s).classList.toggle('show', s === name);
     canvas.style.display = name === 'game' ? 'block' : 'none';
+    updateEndPanel();
+  }
+
+  // 结算画面上的按钮：房主可以“重新开始”，每个人都可以“回到大厅”
+  function updateEndPanel() {
+    const show = inGame && !!endResult;
+    $('endPanel').style.display = show ? 'flex' : 'none';
+    if (!show) return;
+    const isHost = lobby && lobby.hostId === myId;
+    $('restartBtn').style.display = isHost ? 'block' : 'none';
+    $('endWait').style.display = isHost ? 'none' : 'block';
   }
 
   function toast(msg) {
@@ -50,6 +60,7 @@
       case 'lobby':
         lobby = m;
         if (!inGame && myName) { renderLobby(); showScreen('lobbyScreen'); }
+        updateEndPanel();
         break;
       case 'start':
         map = m.map;
@@ -58,7 +69,6 @@
         endResult = null;
         shown.clear();
         killFeed.length = 0;
-        clearTimeout(endTimer);
         inGame = true;
         showScreen('game');
         resize();
@@ -72,11 +82,7 @@
       }
       case 'end':
         endResult = m.result;
-        endTimer = setTimeout(() => {
-          inGame = false;
-          if (lobby) renderLobby();
-          showScreen('lobbyScreen');
-        }, 4000);
+        updateEndPanel();
         break;
       case 'error': toast(m.msg); break;
     }
@@ -162,6 +168,12 @@
     b.onclick = () => sendMsg({ t: 'team', team: b.dataset.team });
   });
   $('startBtn').onclick = () => sendMsg({ t: 'start' });
+  $('restartBtn').onclick = () => sendMsg({ t: 'start' });
+  $('backLobbyBtn').onclick = () => {
+    inGame = false;
+    if (lobby) renderLobby();
+    showScreen('lobbyScreen');
+  };
   $('botFill').onchange = () => sendMsg({ t: 'settings', botFill: $('botFill').checked });
   // ===== 邀请二维码 =====
   let qrTeam = 'red';
