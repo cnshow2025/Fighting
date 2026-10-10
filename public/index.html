@@ -43,9 +43,9 @@
   .helpbox button { display: block; margin: 14px auto 0; }
   #canvas { position: fixed; inset: 0; width: 100vw; height: 100vh; display: none; touch-action: none; }
   #inviteBanner { display: none; font-size: 20px; font-weight: bold; padding: 8px 18px; border-radius: 10px; }
-  .invites { display: none; gap: 10px; }
-  .invites .red { background: #e5484d; }
-  .invites .blue { background: #3e8ef7; }
+  .team button.invite { display: none; margin-top: 8px; background: transparent; font-size: 15px; padding: 8px; }
+  .team.red button.invite { border: 2px solid #e5484d; color: #ffb3b5; }
+  .team.blue button.invite { border: 2px solid #3e8ef7; color: #b8d6ff; }
   #qrModal { position: fixed; inset: 0; background: rgba(0,0,0,0.75); display: none; align-items: center; justify-content: center; z-index: 20; padding: 12px; overflow-y: auto; touch-action: pan-y; }
   #qrModal.show { display: flex; }
   .qrbox { background: #fff; color: #111; border-radius: 16px; padding: 16px; display: flex; flex-direction: column; align-items: center; gap: 8px; max-width: 95vw; margin: auto; }
@@ -81,20 +81,18 @@
       <h2><span>红队</span><span id="redCount">0/5</span></h2>
       <ul id="redList"></ul>
       <button data-team="red">加入红队</button>
+      <button class="invite" data-invite="red">邀请朋友</button>
     </div>
     <div class="team blue">
       <h2><span>蓝队</span><span id="blueCount">0/5</span></h2>
       <ul id="blueList"></ul>
       <button data-team="blue">加入蓝队</button>
+      <button class="invite" data-invite="blue">邀请朋友</button>
     </div>
   </div>
   <div class="hint" id="waitingList"></div>
   <button id="leaveTeamBtn" style="display:none; background:#555; font-size:16px; padding:8px 18px">退出队伍</button>
   <label class="botbox" id="botBox"><input type="checkbox" id="botFill">电脑补位</label>
-  <div class="invites" id="invites">
-    <button class="red" data-invite="red">邀请加入红队</button>
-    <button class="blue" data-invite="blue">邀请加入蓝队</button>
-  </div>
   <button id="startBtn" style="display:none">开始游戏</button>
   <div class="hint" id="lobbyHint"></div>
 </div>
@@ -122,7 +120,7 @@
     </ul>
     <h3>邀请朋友</h3>
     <ul>
-      <li>房主按“邀请加入红队/蓝队”，朋友连上热点后扫二维码就会进入那一队。</li>
+      <li>房主按红队或蓝队框里的“邀请朋友”，朋友连上热点后扫二维码就会进入那一队。</li>
     </ul>
     <button id="helpClose">关闭</button>
   </div>

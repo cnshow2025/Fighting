@@ -112,9 +112,9 @@
     const isHost = lobby.hostId === myId;
     const playing = lobby.phase === 'playing';
     $('startBtn').style.display = isHost && !playing ? 'block' : 'none';
-    $('invites').style.display = isHost ? 'flex' : 'none';
+    document.querySelectorAll('[data-invite]').forEach(b => (b.style.display = isHost ? 'block' : 'none'));
     $('lobbyHint').textContent = playing ? '游戏进行中，请等待下一局' : isHost ? '' : '等待房主开始…';
-    document.querySelectorAll('.team button').forEach(b => (b.disabled = playing));
+    document.querySelectorAll('.team button[data-team]').forEach(b => (b.disabled = playing));
     const mine = ps.find(p => p.id === myId);
     $('leaveTeamBtn').style.display = mine && mine.team && !playing ? 'block' : 'none';
 
@@ -155,7 +155,7 @@
       history.replaceState(null, '', location.pathname);
     }
   };
-  document.querySelectorAll('.team button').forEach(b => {
+  document.querySelectorAll('.team button[data-team]').forEach(b => {
     b.onclick = () => sendMsg({ t: 'team', team: b.dataset.team });
   });
   $('startBtn').onclick = () => sendMsg({ t: 'start' });
