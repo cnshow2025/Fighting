@@ -20,14 +20,26 @@
   button:active { transform: scale(0.97); }
   button:disabled { background: #555; color: #999; }
   .teams { display: flex; gap: 12px; width: min(560px, 95vw); }
-  .team { flex: 1; border-radius: 12px; padding: 10px; min-height: 180px; }
+  #lobbyScreen { gap: 10px; }
+  #lobbyScreen h1 { font-size: 22px; }
+  .team { flex: 1; min-width: 0; border-radius: 12px; padding: 8px 10px; }
+  /* 横屏等矮屏幕：再紧凑一点，让整个大厅放得进一页 */
+  @media (max-height: 420px) {
+    #lobbyScreen { gap: 6px; padding-top: max(8px, env(safe-area-inset-top)); padding-bottom: max(8px, env(safe-area-inset-bottom)); }
+    #lobbyScreen h1 { font-size: 18px; }
+    .team li { padding: 0; }
+    .team button { padding: 6px; }
+    .team button.invite { margin-top: 4px; padding: 4px; }
+    .actions button { padding: 8px 16px !important; font-size: 16px !important; }
+  }
   .team.red { background: #4a1f24; border: 2px solid #e5484d; }
   .team.blue { background: #1c2c4a; border: 2px solid #3e8ef7; }
-  .team h2 { margin: 0 0 8px; font-size: 18px; display: flex; justify-content: space-between; }
-  .team ul { list-style: none; padding: 0; margin: 0 0 10px; min-height: 100px; }
-  .team li { padding: 4px 0; font-size: 16px; }
+  .team h2 { margin: 0 0 4px; font-size: 16px; display: flex; justify-content: space-between; }
+  /* 队员名字两栏排列，人多也不会把框撑得很高 */
+  .team ul { list-style: none; padding: 0; margin: 0 0 6px; min-height: 22px; display: grid; grid-template-columns: 1fr 1fr; gap: 0 8px; }
+  .team li { padding: 2px 0; font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .team li.me { font-weight: bold; text-decoration: underline; }
-  .team button { width: 100%; font-size: 16px; padding: 10px; }
+  .team button { width: 100%; font-size: 15px; padding: 8px; }
   .team.red button { background: #e5484d; }
   .team.blue button { background: #3e8ef7; }
   .hint { color: #aaa; font-size: 14px; text-align: center; }
@@ -44,7 +56,7 @@
   .helpbox button { display: block; margin: 14px auto 0; }
   #canvas { position: fixed; inset: 0; width: 100vw; height: 100vh; display: none; touch-action: none; }
   #inviteBanner { display: none; font-size: 20px; font-weight: bold; padding: 8px 18px; border-radius: 10px; }
-  .team button.invite { display: none; margin-top: 8px; background: transparent; font-size: 15px; padding: 8px; }
+  .team button.invite { display: none; margin-top: 6px; background: transparent; font-size: 14px; padding: 6px; }
   .team.red button.invite { border: 2px solid #e5484d; color: #ffb3b5; }
   .team.blue button.invite { border: 2px solid #3e8ef7; color: #b8d6ff; }
   #qrModal { position: fixed; inset: 0; background: rgba(0,0,0,0.75); display: none; align-items: center; justify-content: center; z-index: 20; padding: 12px; overflow-y: auto; touch-action: pan-y; }
