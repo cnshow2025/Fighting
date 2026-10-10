@@ -31,6 +31,7 @@
   .team.red button { background: #e5484d; }
   .team.blue button { background: #3e8ef7; }
   .hint { color: #aaa; font-size: 14px; text-align: center; }
+  .actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 14px; }
   .botbox { display: none; font-size: 17px; align-items: center; gap: 8px; }
   .botbox input[type=checkbox] { width: 22px; height: 22px; }
   #helpBtn { position: absolute; top: max(12px, env(safe-area-inset-top)); right: max(12px, env(safe-area-inset-right)); font-size: 15px; padding: 8px 14px; background: #333; }
@@ -91,9 +92,11 @@
     </div>
   </div>
   <div class="hint" id="waitingList"></div>
-  <button id="leaveTeamBtn" style="display:none; background:#555; font-size:16px; padding:8px 18px">退出队伍</button>
-  <label class="botbox" id="botBox"><input type="checkbox" id="botFill">电脑补位</label>
-  <button id="startBtn" style="display:none">开始游戏</button>
+  <div class="actions">
+    <button id="leaveTeamBtn" style="display:none; background:#555; font-size:16px; padding:10px 16px">退出队伍</button>
+    <label class="botbox" id="botBox"><input type="checkbox" id="botFill">电脑补位</label>
+    <button id="startBtn" style="display:none">开始游戏</button>
+  </div>
   <div class="hint" id="lobbyHint"></div>
 </div>
 
