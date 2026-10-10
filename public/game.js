@@ -424,6 +424,22 @@
     }
   }
 
+  // 上方显示用的小人头：圆头 + 肩膀
+  function drawHead(x, y, color) {
+    ctx.fillStyle = color;
+    ctx.strokeStyle = 'rgba(0,0,0,0.5)';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.arc(x, y - 4, 5.5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.ellipse(x, y + 9, 9, 6.5, 0, Math.PI, 0);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+  }
+
   let lastFrame = performance.now();
   function frame(now) {
     const dt = Math.min(0.1, (now - lastFrame) / 1000);
@@ -572,11 +588,9 @@
     const mm = Math.floor(state.time / 60), ss = String(state.time % 60).padStart(2, '0');
     ctx.fillStyle = state.time <= 30 ? '#ff6b6f' : '#fff';
     ctx.fillText(`${mm}:${ss}`, vw / 2, 30 + safe.top);
-    ctx.font = 'bold 18px sans-serif';
-    ctx.fillStyle = TEAM_COLOR.red;
-    ctx.fillText(`红 ${state.red}`, vw / 2 - 80, 30 + safe.top);
-    ctx.fillStyle = TEAM_COLOR.blue;
-    ctx.fillText(`蓝 ${state.blue}`, vw / 2 + 80, 30 + safe.top);
+    // 两队还在场上的人数：几个人头就是剩几个人，倒下一个就少一个
+    for (let i = 0; i < state.red; i++) drawHead(vw / 2 - 52 - i * 22, 22 + safe.top, TEAM_COLOR.red);
+    for (let i = 0; i < state.blue; i++) drawHead(vw / 2 + 52 + i * 22, 22 + safe.top, TEAM_COLOR.blue);
     if (cfg.level) {   // 关卡和比分
       ctx.font = '14px sans-serif';
       ctx.fillStyle = '#ddd';
