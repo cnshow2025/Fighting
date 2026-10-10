@@ -25,6 +25,8 @@
 
   // 结算画面上的按钮：房主可以“重新开始”，每个人都可以“回到大厅”
   function updateEndPanel() {
+    // 游戏中房主才有的“回大厅”按钮
+    $('abortBtn').style.display = inGame && !endResult && lobby && lobby.hostId === myId ? 'block' : 'none';
     const show = inGame && !!endResult;
     $('endPanel').style.display = show ? 'flex' : 'none';
     if (!show) return;
@@ -97,6 +99,13 @@
         endResult = m.result;
         updateEndPanel();
         break;
+      case 'abort':   // 房主中止了这一局
+        inGame = false;
+        endResult = null;
+        if (lobby) renderLobby();
+        showScreen('lobbyScreen');
+        toast('房主结束了这一局，回到大厅');
+        break;
       case 'error': toast(m.msg); break;
     }
   }
@@ -165,6 +174,9 @@
   $('startBtn').onclick = () => sendMsg({ t: 'start' });
   $('leaveTeamBtn').onclick = () => sendMsg({ t: 'leaveTeam' });
   $('restartBtn').onclick = () => sendMsg(endResult && !endResult.seriesOver ? { t: 'next' } : { t: 'start' });
+  $('abortBtn').onclick = () => {
+    if (confirm('确定要结束这一局，让大家回到大厅吗？')) sendMsg({ t: 'abort' });
+  };
   $('backLobbyBtn').onclick = () => {
     inGame = false;
     if (lobby) renderLobby();
@@ -622,7 +634,7 @@
     // 击倒消息
     ctx.textAlign = 'right';
     ctx.font = '14px sans-serif';
-    let fy = 24 + safe.top;
+    let fy = 64 + safe.top;   // 留出右上角“回大厅”按钮的位置
     const t = Date.now();
     for (const k of killFeed) {
       if (k.until < t) continue;

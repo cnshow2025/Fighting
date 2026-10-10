@@ -693,6 +693,20 @@ wss.on('connection', ws => {
         if (!startSeries()) send(p, { t: 'error', msg: '红蓝两队都至少要有 1 人才能开始（或打开“电脑补位”）' });
         break;
       }
+      case 'abort': {   // 房主在游戏中按“回大厅”：中止这一局，所有人回大厅
+        if (p.id !== hostId || phase !== 'playing') break;
+        for (const q of [...players.values()]) {
+          if (q.isBot) players.delete(q.id);
+          else q.inMatch = false;
+        }
+        bullets = [];
+        series = null;
+        lastResult = null;
+        phase = 'lobby';
+        broadcast({ t: 'abort' });
+        broadcastLobby();
+        break;
+      }
       case 'next': {   // 下一关（或平局重打这一关）
         if (p.id !== hostId || phase !== 'ended' || !series || (lastResult && lastResult.seriesOver)) break;
         if (!startRound()) send(p, { t: 'error', msg: '红蓝两队都至少要有 1 人才能开始（或打开“电脑补位”）' });
