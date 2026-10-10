@@ -31,10 +31,16 @@
   .team.red button { background: #e5484d; }
   .team.blue button { background: #3e8ef7; }
   .hint { color: #aaa; font-size: 14px; text-align: center; }
-  .botbox { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 10px; background: #1f232c; border-radius: 12px; padding: 10px 14px; width: min(560px, 95vw); }
-  .botbox label { font-size: 16px; display: flex; align-items: center; gap: 6px; }
+  .botbox { display: none; font-size: 17px; align-items: center; gap: 8px; }
   .botbox input[type=checkbox] { width: 22px; height: 22px; }
-  #result { font-size: 26px; font-weight: bold; text-align: center; }
+  #helpBtn { position: absolute; top: max(12px, env(safe-area-inset-top)); right: max(12px, env(safe-area-inset-right)); font-size: 15px; padding: 8px 14px; background: #333; }
+  #helpModal { position: fixed; inset: 0; background: rgba(0,0,0,0.75); display: none; align-items: center; justify-content: center; z-index: 20; padding: 12px; overflow-y: auto; touch-action: pan-y; }
+  #helpModal.show { display: flex; }
+  .helpbox { background: #1f232c; border-radius: 16px; padding: 18px 20px; max-width: min(520px, 95vw); margin: auto; font-size: 15px; line-height: 1.6; }
+  .helpbox h2 { margin: 0 0 6px; font-size: 20px; }
+  .helpbox h3 { margin: 12px 0 2px; font-size: 16px; color: #ffd166; }
+  .helpbox ul { margin: 0; padding-left: 20px; }
+  .helpbox button { display: block; margin: 14px auto 0; }
   #canvas { position: fixed; inset: 0; width: 100vw; height: 100vh; display: none; touch-action: none; }
   #inviteBanner { display: none; font-size: 20px; font-weight: bold; padding: 8px 18px; border-radius: 10px; }
   .invites { display: none; gap: 10px; }
@@ -69,7 +75,7 @@
 
 <div id="lobbyScreen" class="screen">
   <h1>大厅</h1>
-  <div id="result"></div>
+  <button id="helpBtn">❓ 说明</button>
   <div class="teams">
     <div class="team red">
       <h2><span>红队</span><span id="redCount">0/5</span></h2>
@@ -84,18 +90,42 @@
   </div>
   <div class="hint" id="waitingList"></div>
   <button id="leaveTeamBtn" style="display:none; background:#555; font-size:16px; padding:8px 18px">退出队伍</button>
-  <div class="botbox">
-    <label><input type="checkbox" id="botFill">电脑补位</label>
-    <span>电脑难度随关卡提升：第 1 关简单 → 第 2 关普通 → 第 3 关困难</span>
-    <div class="hint" id="botHint" style="width:100%"></div>
-  </div>
+  <label class="botbox" id="botBox"><input type="checkbox" id="botFill">电脑补位</label>
   <div class="invites" id="invites">
     <button class="red" data-invite="red">邀请加入红队</button>
     <button class="blue" data-invite="blue">邀请加入蓝队</button>
   </div>
   <button id="startBtn" style="display:none">开始游戏</button>
   <div class="hint" id="lobbyHint"></div>
-  <div class="hint">玩法：左半屏拖动 = 移动；右半屏拖动 = 瞄准并开火<br>躲在遮蔽物后面敌人看不到你。子弹无限。<br>三关三战两胜：第 1 关仓库 → 第 2 关废墟 → 第 3 关荒野，先赢 2 关的队获胜。<br>每关 1 分钟，存活人数多或先全灭对方就赢这一关；平局重打。木箱、沙包会被打坏。<br>打开“电脑补位”时，每队至少 3 人，人数不够由电脑补上。</div>
+</div>
+
+<div id="helpModal">
+  <div class="helpbox">
+    <h2>游戏说明</h2>
+    <h3>操作</h3>
+    <ul>
+      <li>左半屏拖动 = 移动；右半屏拖动 = 瞄准，推远一点自动开火。</li>
+      <li>子弹无限。每人 3 点血，圆圈每中一枪黑一块，中 3 枪倒下。</li>
+      <li>躲在遮蔽物后面，敌人就看不到你。</li>
+    </ul>
+    <h3>三关三战两胜</h3>
+    <ul>
+      <li>第 1 关仓库 → 第 2 关废墟 → 第 3 关荒野，掩体一关比一关少，先赢 2 关的队获胜。</li>
+      <li>每关 1 分钟：先全灭对方，或时间到时存活人数多，就赢这一关；平局重打。</li>
+      <li>木箱、沙包会被打坏；断墙、石头打不坏。</li>
+    </ul>
+    <h3>电脑补位（房主设定）</h3>
+    <ul>
+      <li>打开时每队至少 3 人，人多的一队超过 3 人时另一队补到一样多。</li>
+      <li>电脑难度：第 1 关简单、第 2 关普通、第 3 关困难。</li>
+      <li>真人对电脑时，第 2、3 关电脑那队多 1 人。</li>
+    </ul>
+    <h3>邀请朋友</h3>
+    <ul>
+      <li>房主按“邀请加入红队/蓝队”，朋友连上热点后扫二维码就会进入那一队。</li>
+    </ul>
+    <button id="helpClose">关闭</button>
+  </div>
 </div>
 
 <div id="qrModal">

@@ -98,14 +98,6 @@
   }
 
   // ===== 大厅 =====
-  function resultText(r) {
-    if (!r) return '';
-    const sc = `比分 红 ${r.score.red} : 蓝 ${r.score.blue}`;
-    if (r.seriesOver) return `${TEAM_NAME[r.seriesWinner]}赢得整场比赛！（${sc}）`;
-    const w = r.winner === 'draw' ? '平局' : `${TEAM_NAME[r.winner]}获胜`;
-    return `第 ${r.level} 关${w}（${r.reason}，目前${sc}）`;
-  }
-
   function renderLobby() {
     const ps = lobby.players;
     for (const team of ['red', 'blue']) {
@@ -116,30 +108,19 @@
     }
     const waiting = ps.filter(p => !p.team);
     $('waitingList').textContent = waiting.length ? '未选队：' + waiting.map(p => p.name).join('、') : '';
-    $('result').textContent = resultText(lobby.result);
 
     const isHost = lobby.hostId === myId;
     const playing = lobby.phase === 'playing';
     $('startBtn').style.display = isHost && !playing ? 'block' : 'none';
     $('invites').style.display = isHost ? 'flex' : 'none';
-    $('lobbyHint').textContent = playing ? '游戏进行中，请等待下一局'
-      : isHost ? '你是房主，人齐后按“开始游戏”' : '等待房主开始游戏…';
+    $('lobbyHint').textContent = playing ? '游戏进行中，请等待下一局' : isHost ? '' : '等待房主开始…';
     document.querySelectorAll('.team button').forEach(b => (b.disabled = playing));
     const mine = ps.find(p => p.id === myId);
     $('leaveTeamBtn').style.display = mine && mine.team && !playing ? 'block' : 'none';
 
-    // 电脑补位（只有房主能改）
-    const st = lobby.settings;
-    const canEdit = isHost && !playing;
-    $('botFill').checked = st.botFill;
-    $('botFill').disabled = !canEdit;
-    const red = ps.filter(p => p.team === 'red').length, blue = ps.filter(p => p.team === 'blue').length;
-    const n = Math.max(red, blue, lobby.minTeam);
-    const bots = (n - red) + (n - blue);
-    $('botHint').textContent = !st.botFill ? '电脑补位已关闭：只有真人对打，两队都至少要有 1 人'
-      : (bots ? `每队至少 ${lobby.minTeam} 人。第 1 关会加入 ${bots} 个电脑（红队 ${n - red} 个、蓝队 ${n - blue} 个），变成 ${n}v${n}`
-        : `两队人数一样，不需要电脑（${n}v${n}）`)
-        + ((red === 0) !== (blue === 0) ? '。第 2、3 关全电脑的那队会多 1 人' : '');
+    // 电脑补位开关（只有房主看得到）
+    $('botBox').style.display = isHost && !playing ? 'flex' : 'none';
+    $('botFill').checked = lobby.settings.botFill;
   }
 
   function esc(s) {
@@ -185,6 +166,8 @@
     if (lobby) renderLobby();
     showScreen('lobbyScreen');
   };
+  $('helpBtn').onclick = () => $('helpModal').classList.add('show');
+  $('helpClose').onclick = () => $('helpModal').classList.remove('show');
   $('botFill').onchange = () => sendMsg({ t: 'settings', botFill: $('botFill').checked });
   // ===== 邀请二维码 =====
   let qrTeam = 'red';
