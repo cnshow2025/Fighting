@@ -402,13 +402,9 @@ function startRound() {
   if (settings.botFill) {
     // 用电脑补位：每队至少 3 人，并且两队人数一样
     const target = Math.max(red.length, blue.length, MIN_TEAM);
-    // 第 2、3 关：全是电脑的那一队多 1 人
-    const extra = series.level >= 1 ? 1 : 0;
-    const redTarget = Math.min(TEAM_SIZE, target + (red.length === 0 && blue.length > 0 ? extra : 0));
-    const blueTarget = Math.min(TEAM_SIZE, target + (blue.length === 0 && red.length > 0 ? extra : 0));
     // 电脑名字每队各自编号：🤖红电1、🤖蓝电1……
-    for (let n = 1; red.length < redTarget; n++) red.push(createBot('red', n));
-    for (let n = 1; blue.length < blueTarget; n++) blue.push(createBot('blue', n));
+    for (let n = 1; red.length < target; n++) red.push(createBot('red', n));
+    for (let n = 1; blue.length < target; n++) blue.push(createBot('blue', n));
   }
   if (red.length === 0 || blue.length === 0) return false;
 
