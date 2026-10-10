@@ -78,6 +78,10 @@
         resize();
         break;
       case 'state': state = m; break;
+      case 'medkit':
+        killFeed.push({ text: `${m.name} 吃到救护包，补满血`, color: '#4ade80', until: Date.now() + 4000 });
+        if (killFeed.length > 4) killFeed.shift();
+        break;
       case 'obs': {   // 木箱、沙包被打到
         const o = map && map.obstacles[m.i];
         if (o) { o.hp = m.hp; if (m.hp <= 0) o.dead = true; }
@@ -479,6 +483,29 @@
     ctx.strokeStyle = '#555';
     ctx.lineWidth = 4;
     ctx.strokeRect(0, 0, map.w, map.h);
+
+    // 救护包：白底红十字，轻轻闪动
+    if (state.kits) {
+      const pulse = 1 + 0.08 * Math.sin(now / 200);
+      for (const [x, y] of state.kits) {
+        const h = 14 * pulse;
+        ctx.fillStyle = 'rgba(74,222,128,0.25)';
+        ctx.beginPath();
+        ctx.arc(x, y, h + 8, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#fff';
+        ctx.strokeStyle = '#c62828';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        if (ctx.roundRect) ctx.roundRect(x - h, y - h, h * 2, h * 2, 5);
+        else ctx.rect(x - h, y - h, h * 2, h * 2);   // 旧手机浏览器没有圆角方法
+        ctx.fill();
+        ctx.stroke();
+        ctx.fillStyle = '#e53935';
+        ctx.fillRect(x - h * 0.2, y - h * 0.65, h * 0.4, h * 1.3);
+        ctx.fillRect(x - h * 0.65, y - h * 0.2, h * 1.3, h * 0.4);
+      }
+    }
 
     // 子弹
     for (const [x, y, t] of state.bullets) {

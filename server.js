@@ -24,6 +24,8 @@ const MIN_TEAM = 3;           // 每队至少 3 人，不足的用电脑补
 const TICK_RATE = 30;
 
 const WIN_ROUNDS = 2;          // 三战两胜
+const MEDKIT_R = 14;            // 救护包大小
+const MEDKIT_RESPAWN = 15000;   // 救护包被吃掉后多久在别处再出现（毫秒）
 
 // ===== 三个关卡（左半边定义，右半边中心对称生成） =====
 // 障碍物种类：crate 木箱、sandbag 沙包（可以打坏）；wall 断墙、rock 石头（打不坏）
@@ -34,16 +36,16 @@ const W = (x, y, w, h) => ({ type: 'wall', x, y, w, h });
 const R = (x, y, w, h) => ({ type: 'rock', x, y, w, h });
 
 const LEVELS = [
-  { name: '仓库', difficulty: 'easy',      // 掩体多，好躲
+  { name: '仓库', difficulty: 'easy', medkits: 0,      // 掩体多，好躲
     center: [C(768, 468, 64, 64)],
     half: [S(150, 420, 36, 160), C(230, 180, 64, 64), C(230, 756, 64, 64), C(360, 320, 72, 72), C(360, 608, 72, 72),
       S(470, 110, 170, 36), S(470, 854, 170, 36), C(520, 460, 64, 64), C(640, 260, 64, 64), C(640, 676, 64, 64), S(600, 340, 36, 100)] },
-  { name: '废墟', difficulty: 'normal',    // 断墙为主，缺口可以穿过
+  { name: '废墟', difficulty: 'normal', medkits: 3,    // 断墙为主，缺口可以穿过
     center: [W(788, 300, 24, 150), W(788, 550, 24, 150)],
     half: [W(200, 250, 24, 150), W(200, 250, 140, 24), W(200, 600, 24, 150), W(200, 726, 140, 24),
       W(430, 170, 120, 24), W(610, 170, 120, 24), W(430, 806, 120, 24), W(610, 806, 120, 24),
       C(470, 460, 64, 64), R(600, 380, 70, 60), S(620, 560, 36, 100)] },
-  { name: '荒野', difficulty: 'hard',      // 掩体少，很开阔
+  { name: '荒野', difficulty: 'hard', medkits: 3,      // 掩体少，很开阔
     center: [R(760, 460, 80, 80)],
     half: [R(260, 300, 70, 60), R(260, 640, 70, 60), R(560, 170, 80, 70), R(560, 760, 80, 70), S(600, 450, 36, 100)] },
 ];
@@ -56,6 +58,7 @@ function buildObstacles(level) {
 
 let obstacles = [];   // 本局全部障碍物（含已打坏的）
 let solid = [];       // 还没被打坏的障碍物
+let medkits = [];     // 救护包：{ x, y, active, respawnAt }
 
 // ===== 静态文件服务 =====
 const PUBLIC_DIR = path.join(__dirname, 'public');
@@ -355,8 +358,11 @@ function botThink(bot, now) {
     }
   } else {
     ai.seeSince = 0;
+    let kit;
     if (now < ai.hideUntil) {
       move = { x: 0, y: 0 };               // 躲着等一下
+    } else if (bot.hp < MAX_HP && (kit = nearestMedkit(bot))) {
+      move = goTo(bot, ai, now, kit.x, kit.y);   // 受伤了先去吃救护包
     } else if (ai.lastSeen && now - ai.lastSeen.t < 8000) {
       move = goTo(bot, ai, now, ai.lastSeen.x, ai.lastSeen.y);   // 去敌人最后出现的地方找
       if (Math.hypot(ai.lastSeen.x - bot.x, ai.lastSeen.y - bot.y) < 30) ai.lastSeen = null;
@@ -383,6 +389,53 @@ function botThink(bot, now) {
 
   if (!aim && (move.x || move.y)) aim = move;
   bot.input = { mx: move.x, my: move.y, ax: aim ? aim.x : 0, ay: aim ? aim.y : 0, fire };
+}
+
+// ===== 救护包 =====
+// 随机找一个空地：不在障碍物里、不靠近出生区、和别的救护包隔开
+function randomMedkitSpot() {
+  for (let tries = 0; tries < 200; tries++) {
+    const x = 220 + Math.random() * (MAP_W - 440), y = 60 + Math.random() * (MAP_H - 120);
+    const [c, r] = cellOf(x, y);
+    if (blocked[r * COLS + c]) continue;
+    if (medkits.some(k => k.active && Math.hypot(k.x - x, k.y - y) < 200)) continue;
+    return { x, y };
+  }
+  return { x: MAP_W / 2, y: 60 };
+}
+
+function placeMedkits(count) {
+  medkits = [];
+  for (let i = 0; i < count; i++) medkits.push({ ...randomMedkitSpot(), active: true, respawnAt: 0 });
+}
+
+function updateMedkits(now) {
+  for (const k of medkits) {
+    if (!k.active) {
+      if (now >= k.respawnAt) Object.assign(k, randomMedkitSpot(), { active: true });
+      continue;
+    }
+    for (const p of players.values()) {
+      if (!p.inMatch || !p.alive || p.hp >= MAX_HP) continue;   // 满血的人走过去不会浪费掉
+      if (Math.hypot(p.x - k.x, p.y - k.y) < PLAYER_R + MEDKIT_R) {
+        p.hp = MAX_HP;   // 吃到就补满血
+        k.active = false;
+        k.respawnAt = now + MEDKIT_RESPAWN;
+        broadcast({ t: 'medkit', name: p.name, team: p.team });
+        break;
+      }
+    }
+  }
+}
+
+function nearestMedkit(p) {
+  let best = null, bd = Infinity;
+  for (const k of medkits) {
+    if (!k.active) continue;
+    const d = Math.hypot(k.x - p.x, k.y - p.y);
+    if (d < bd) { bd = d; best = k; }
+  }
+  return best;
 }
 
 // ===== 开始 / 结束 =====
@@ -431,6 +484,7 @@ function startRound() {
   place(blue, MAP_W - 60);
 
   bullets = [];
+  placeMedkits(level.medkits);
   timeLeft = MATCH_TIME;
   lastResult = null;
   phase = 'playing';
@@ -546,6 +600,7 @@ function tick(dt) {
   }
   bullets = kept;
 
+  updateMedkits(now);
   checkWin();
   if (phase === 'playing') sendStates();
 }
@@ -594,6 +649,7 @@ function sendStates() {
       me: v.inMatch ? { id: v.id, x: v.x, y: v.y, hp: v.hp, alive: v.alive, kills: v.kills, team: v.team } : null,
       players: list,
       bullets: bl,
+      kits: medkits.filter(k => k.active).map(k => [Math.round(k.x), Math.round(k.y)]),   // 救护包大家都看得到
       red, blue,
     });
   }
