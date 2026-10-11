@@ -294,7 +294,9 @@
   const look = { id: null, x: 0 };
   let fireTouch = null;
   const fpActive = () => isFP() && use3d && r3 && fpYaw !== null && state && state.me && state.me.alive;
-  const fireBtn = () => ({ x: vw - 95 - safe.right, y: vh - 95 - safe.bottom, r: 48 });
+  // 左下角固定的移动圆圈；右下角的大圆圈：中间是开火键，外圈拖动转身
+  const movePad = () => ({ x: 100 + safe.left, y: vh - 100 - safe.bottom });
+  const turnPad = () => ({ x: vw - 120 - safe.right, y: vh - 115 - safe.bottom, R: 85, r: 38 });
 
   function stickVec(s) {
     let dx = s.x - s.ox, dy = s.y - s.oy;
@@ -307,10 +309,19 @@
     e.preventDefault();
     const fp = fpActive();
     for (const t of e.changedTouches) {
-      if (fp) {
-        const fb = fireBtn();
-        if (Math.hypot(t.clientX - fb.x, t.clientY - fb.y) < fb.r + 10) { if (fireTouch === null) fireTouch = t.identifier; continue; }
-        if (t.clientX >= window.innerWidth / 2) { if (look.id === null) { look.id = t.identifier; look.x = t.clientX; } continue; }
+      if (fp && t.clientX >= window.innerWidth / 2) {
+        // 右半边：按在开火键上 = 开火（按住往左右拖还能同时转身）；其他地方 = 只转身
+        const tp = turnPad();
+        if (Math.hypot(t.clientX - tp.x, t.clientY - tp.y) < tp.r + 6 && fireTouch === null) fireTouch = t.identifier;
+        if (look.id === null) { look.id = t.identifier; look.x = t.clientX; }
+        continue;
+      }
+      if (fp && sticks.move.id === null) {   // 左半边：移动摇杆以左下角圆圈为中心
+        const mp = movePad();
+        sticks.move.id = t.identifier;
+        sticks.move.ox = mp.x; sticks.move.oy = mp.y;
+        sticks.move.x = t.clientX; sticks.move.y = t.clientY;
+        continue;
       }
       const s = t.clientX < window.innerWidth / 2 ? sticks.move : sticks.aim;
       if (s.id !== null) continue;
@@ -817,25 +828,46 @@
       ctx.arc(s.ox + v.x * STICK_R, s.oy + v.y * STICK_R, 24, 0, Math.PI * 2);
       ctx.fill();
     }
-    if (fpOn) {   // 开火键
-      const fb = fireBtn();
-      ctx.fillStyle = fireTouch !== null ? 'rgba(229,72,77,0.85)' : 'rgba(229,72,77,0.45)';
-      ctx.beginPath();
-      ctx.arc(fb.x, fb.y, fb.r, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.strokeStyle = 'rgba(255,255,255,0.7)';
+    if (fpOn) {
+      // 左下角：移动圆圈（一直显示）
+      const mp = movePad();
+      ctx.strokeStyle = 'rgba(255,255,255,0.45)';
       ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(mp.x, mp.y, STICK_R, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.textAlign = 'center';
+      ctx.font = 'bold 14px sans-serif';
+      ctx.fillStyle = 'rgba(255,255,255,0.7)';
+      if (sticks.move.id === null) ctx.fillText('移动', mp.x, mp.y + 5);
+      // 右下角：外圈转身、中间开火
+      const tp = turnPad();
+      ctx.fillStyle = look.id !== null ? 'rgba(255,255,255,0.22)' : 'rgba(255,255,255,0.12)';
+      ctx.beginPath();
+      ctx.arc(tp.x, tp.y, tp.R, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(255,255,255,0.45)';
+      ctx.stroke();
+      ctx.fillStyle = 'rgba(255,255,255,0.8)';
+      ctx.font = 'bold 13px sans-serif';
+      ctx.fillText('◀', tp.x - tp.R + 16, tp.y + 5);
+      ctx.fillText('▶', tp.x + tp.R - 16, tp.y + 5);
+      ctx.fillText('转身', tp.x, tp.y + tp.R - 12);
+      ctx.fillStyle = fireTouch !== null ? 'rgba(229,72,77,0.9)' : 'rgba(229,72,77,0.6)';
+      ctx.beginPath();
+      ctx.arc(tp.x, tp.y, tp.r, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(255,255,255,0.8)';
       ctx.stroke();
       ctx.fillStyle = '#fff';
-      ctx.font = 'bold 18px sans-serif';
-      ctx.textAlign = 'center';
-      ctx.fillText('开火', fb.x, fb.y + 6);
+      ctx.font = 'bold 17px sans-serif';
+      ctx.fillText('开火', tp.x, tp.y + 6);
     }
     if (me && me.alive && sticks.move.id === null && sticks.aim.id === null && look.id === null && state.time > cfg.matchTime - 10) {   // 开局前 10 秒显示操作提示
       ctx.textAlign = 'center';
       ctx.fillStyle = 'rgba(255,255,255,0.6)';
       ctx.font = '15px sans-serif';
-      ctx.fillText(fpOn ? '左边拖动移动　　右边拖动转身　　按住开火键射击' : '左边拖动移动　　右边拖动瞄准开火', vw / 2, vh - 20 - safe.bottom);
+      ctx.fillText(fpOn ? '左边拖动移动　　右边拖动转身　　按住开火键射击（按住拖动可边打边转）' : '左边拖动移动　　右边拖动瞄准开火', vw / 2, vh - 20 - safe.bottom);
     }
 
     // 开局显示关卡名称
