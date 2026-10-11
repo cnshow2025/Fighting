@@ -349,7 +349,10 @@
   let lastAim = { x: 1, y: 0 };
   // 第一、三人称：自己面对的方向（弧度）、转身用的手指、按住开火键的手指
   let fpYaw = null;
-  const look = { id: null, x: 0 };
+  const look = { id: null, x0: 0, x: 0 };
+  // 转身像摇杆：按住往左/右推就一直转，推得越远转得越快，放开就停
+  const TURN_R = 70, TURN_DEAD = 0.12, TURN_SPEED = 3.5;   // 推满的距离（像素）、中间不转的范围、最快每秒转几弧度（约 200°）
+  const lookPush = () => Math.max(-1, Math.min(1, (look.x - look.x0) / TURN_R));
   let fireTouch = null;
   const fpActive = () => isFP() && use3d && r3 && fpYaw !== null && state && state.me && state.me.alive;
   // 左下角固定的移动圆圈；右下角的大圆圈：中间是开火键，外圈拖动转身
@@ -386,7 +389,7 @@
         // 右半边：按在开火键上 = 开火（按住往左右拖还能同时转身）；其他地方 = 只转身
         const tp = turnPad();
         if (Math.hypot(t.clientX - tp.x, t.clientY - tp.y) < tp.r + 6 && fireTouch === null) fireTouch = t.identifier;
-        if (look.id === null) { look.id = t.identifier; look.x = t.clientX; }
+        if (look.id === null) { look.id = t.identifier; look.x0 = look.x = t.clientX; }
         continue;
       }
       if (fp && sticks.move.id === null) {   // 左半边：移动摇杆以左下角圆圈为中心
@@ -407,10 +410,7 @@
   canvas.addEventListener('touchmove', e => {
     e.preventDefault();
     for (const t of e.changedTouches) {
-      if (t.identifier === look.id) {   // 左右拖动转身
-        if (fpYaw !== null) fpYaw += (t.clientX - look.x) * 0.008;
-        look.x = t.clientX;
-      }
+      if (t.identifier === look.id) look.x = t.clientX;   // 转身的推动距离，每一帧在 frame() 里转
       for (const s of Object.values(sticks)) {
         if (s.id === t.identifier) { s.x = t.clientX; s.y = t.clientY; }
       }
@@ -763,6 +763,10 @@
     lastFrame = now;
     requestAnimationFrame(frame);
     if (!inGame || !map) return;
+    if (look.id !== null && fpActive()) {   // 按住往左右推：持续转身
+      const o = lookPush(), a = Math.abs(o);
+      if (a > TURN_DEAD) fpYaw += Math.sign(o) * TURN_SPEED * Math.pow((a - TURN_DEAD) / (1 - TURN_DEAD), 1.5) * dt;
+    }
 
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     const in3d = use3d && r3;
@@ -993,6 +997,12 @@
       ctx.fillText('◀', tp.x - tp.R + 16, tp.y + 5);
       ctx.fillText('▶', tp.x + tp.R - 16, tp.y + 5);
       ctx.fillText('转身', tp.x, tp.y + tp.R - 12);
+      if (look.id !== null) {   // 显示现在往哪边推、推多远
+        ctx.fillStyle = 'rgba(255,255,255,0.55)';
+        ctx.beginPath();
+        ctx.arc(tp.x + lookPush() * (tp.R - 16), tp.y, 16, 0, Math.PI * 2);
+        ctx.fill();
+      }
       ctx.fillStyle = fireTouch !== null ? 'rgba(229,72,77,0.9)' : 'rgba(229,72,77,0.6)';
       ctx.beginPath();
       ctx.arc(tp.x, tp.y, tp.r, 0, Math.PI * 2);
@@ -1007,7 +1017,7 @@
       ctx.textAlign = 'center';
       ctx.fillStyle = 'rgba(255,255,255,0.6)';
       ctx.font = '15px sans-serif';
-      ctx.fillText(fpOn ? '左边拖动移动　　右边拖动转身　　按住开火键射击（按住拖动可边打边转）' : '左边拖动移动　　右边拖动瞄准开火', vw / 2, vh - 20 - safe.bottom);
+      ctx.fillText(fpOn ? '左边拖动移动　　右边按住往左右推转身　　按住开火键射击（按住往左右推可边打边转）' : '左边拖动移动　　右边拖动瞄准开火', vw / 2, vh - 20 - safe.bottom);
     }
 
     // 开局显示关卡名称
