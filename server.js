@@ -26,6 +26,8 @@ const TICK_RATE = 30;
 const WIN_ROUNDS = 2;          // 三战两胜
 const MEDKIT_R = 14;            // 救护包大小
 const MEDKIT_RESPAWN = 15000;   // 救护包被吃掉后多久在别处再出现（毫秒）
+const COUNTDOWN = 3000;         // 每关开局 3、2、1 倒数（毫秒），倒数时不能动
+const STREAK_WINDOW = 4000;     // 多少毫秒内连续击倒算连杀
 
 // ===== 三个关卡（左半边定义，右半边中心对称生成） =====
 // 障碍物种类：crate 木箱、sandbag 沙包（可以打坏）；wall 断墙、rock 石头（打不坏）
@@ -99,6 +101,12 @@ let phase = 'lobby';         // lobby | playing | ended
 let bullets = [];
 let timeLeft = 0;
 let lastResult = null;
+let freezeUntil = 0;         // 开局倒数结束的时间
+
+// 给某个真人的事件（音效、打击感用），随下一次 state 一起送出
+function pushEv(p, e) {
+  if (!p.isBot) (p.ev || (p.ev = [])).push(e);
+}
 const settings = { botFill: true };   // 房主设定：电脑补位
 let series = null;                    // 三战两胜：{ level, score: { red, blue } }
 
@@ -421,7 +429,7 @@ function updateMedkits(now) {
         p.hp = MAX_HP;   // 吃到就补满血
         k.active = false;
         k.respawnAt = now + MEDKIT_RESPAWN;
-        broadcast({ t: 'medkit', name: p.name, team: p.team });
+        broadcast({ t: 'medkit', id: p.id, name: p.name, team: p.team });
         break;
       }
     }
@@ -475,6 +483,9 @@ function startRound() {
       p.hp = MAX_HP;
       p.alive = true;
       p.kills = 0;
+      p.streak = 0;
+      p.lastKillAt = 0;
+      p.ev = [];
       p.lastShot = 0;
       p.input = { mx: 0, my: 0, ax: 0, ay: 0, fire: false };
       if (p.isBot) p.ai = newBotBrain();
@@ -486,6 +497,7 @@ function startRound() {
   bullets = [];
   placeMedkits(level.medkits);
   timeLeft = MATCH_TIME;
+  freezeUntil = Date.now() + COUNTDOWN;
   lastResult = null;
   phase = 'playing';
   broadcast({
@@ -516,9 +528,19 @@ function endMatch(winner, reason) {
     score: { ...series.score }, seriesOver,
     seriesWinner: seriesOver ? (series.score.red > series.score.blue ? 'red' : 'blue') : null,
     nextLevel: series.level + 1, nextLevelName: LEVELS[series.level].name,
+    mvp: findMvp(),
   };
   broadcast({ t: 'end', result: lastResult });
   broadcastLobby();
+}
+
+// 这一关击倒最多的人
+function findMvp() {
+  let best = null;
+  for (const p of players.values()) {
+    if (p.inMatch && p.kills > 0 && (!best || p.kills > best.kills)) best = p;
+  }
+  return best ? { name: best.name, team: best.team, kills: best.kills } : null;
 }
 
 function checkWin() {
@@ -537,6 +559,7 @@ function checkWin() {
 function tick(dt) {
   if (phase !== 'playing') return;
   const now = Date.now();
+  if (now < freezeUntil) { sendStates(); return; }   // 开局倒数中：大家都不能动
   timeLeft -= dt;
 
   for (const p of players.values()) if (p.isBot && p.inMatch && p.alive) botThink(p, now);
@@ -564,6 +587,14 @@ function tick(dt) {
         vy: Math.sin(p.angle) * BULLET_SPEED,
         owner: p.id, team: p.team,
       });
+      // 枪声：只告诉每个人“多大声”，不透露位置
+      for (const v of players.values()) {
+        if (v.isBot) continue;
+        if (v === p) { pushEv(v, { k: 'sh', me: 1 }); continue; }
+        const d = v.inMatch ? Math.hypot(v.x - p.x, v.y - p.y) : 600;
+        const vol = 1 - d / 1400;
+        if (vol > 0.05) pushEv(v, { k: 'sh', v: +vol.toFixed(2) });
+      }
     }
   }
 
@@ -586,11 +617,21 @@ function tick(dt) {
         if (distToSegSq(p.x, p.y, b.x, b.y, x2, y2) < rr * rr) {
           gone = true;
           p.hp--;
+          const shooter = players.get(b.owner);
+          if (shooter) pushEv(shooter, { k: 'hit', x: Math.round(p.x), y: Math.round(p.y) });   // 命中标记
+          pushEv(p, { k: 'hurt' });                                                           // 中弹：闪红、震动
           if (p.hp <= 0) {
             p.alive = false;
-            const killer = players.get(b.owner);
-            if (killer) killer.kills++;
-            broadcast({ t: 'kill', killer: killer ? killer.name : '?', killerTeam: b.team, victim: p.name });
+            let streak = 1;
+            if (shooter) {
+              shooter.kills++;
+              streak = shooter.streak = now - shooter.lastKillAt <= STREAK_WINDOW ? shooter.streak + 1 : 1;
+              shooter.lastKillAt = now;
+            }
+            broadcast({ t: 'kill', killer: shooter ? shooter.name : '?', killerId: b.owner, killerTeam: b.team, victim: p.name, victimId: p.id, streak });
+            // 一队只剩最后一人
+            const left = [...players.values()].filter(q => q.inMatch && q.alive && q.team === p.team);
+            if (left.length === 1 && aliveCount(b.team) > 0) broadcast({ t: 'lastman', team: p.team, id: left[0].id, name: left[0].name });
           }
           break;
         }
@@ -646,12 +687,15 @@ function sendStates() {
     send(v, {
       t: 'state',
       time: Math.max(0, Math.ceil(timeLeft)),
+      cd: Math.max(0, Math.ceil((freezeUntil - Date.now()) / 1000)),   // 开局倒数还剩几秒
+      ev: v.ev && v.ev.length ? v.ev : undefined,
       me: v.inMatch ? { id: v.id, x: v.x, y: v.y, hp: v.hp, alive: v.alive, kills: v.kills, team: v.team } : null,
       players: list,
       bullets: bl,
       kits: medkits.filter(k => k.active).map(k => [Math.round(k.x), Math.round(k.y)]),   // 救护包大家都看得到
       red, blue,
     });
+    v.ev = [];
   }
 }
 

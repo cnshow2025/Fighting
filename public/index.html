@@ -79,6 +79,8 @@
   #restartBtn { background: #22a55b; font-size: 20px; padding: 12px 26px; }
   #backLobbyBtn { background: #555; }
   #abortBtn { position: fixed; top: max(10px, env(safe-area-inset-top)); right: max(10px, env(safe-area-inset-right)); display: none; z-index: 5; font-size: 14px; padding: 6px 12px; background: rgba(60,60,60,0.85); }
+  #muteBtn { position: fixed; top: max(56px, calc(env(safe-area-inset-top) + 46px)); right: max(12px, env(safe-area-inset-right)); z-index: 6; font-size: 18px; padding: 4px 10px; background: rgba(60,60,60,0.85); }
+  #endPanel { top: calc(50% + 86px) !important; }
   #toast { position: fixed; top: max(20px, env(safe-area-inset-top)); left: 50%; transform: translateX(-50%); background: #c33; padding: 8px 16px; border-radius: 8px; display: none; z-index: 10; }
 </style>
 </head>
@@ -128,6 +130,7 @@
       <li>左半屏拖动 = 移动；右半屏拖动 = 瞄准，推远一点自动开火。</li>
       <li>子弹无限。每人 3 点血，圆圈每中一枪黑一块，中 3 枪倒下。</li>
       <li>躲在遮蔽物后面，敌人就看不到你。</li>
+      <li>每关开局有 3、2、1 倒数，倒数完才能动。连续击倒会有“双杀”“三杀”播报，结算时显示 MVP。右上角 🔊 可以静音。</li>
       <li>大厅里可以选 2D、3D、第一人称、第三人称，每个人自己选，规则一样。手机跑不顺就用 2D。</li>
       <li>第一、三人称：左下角圆圈移动；右下角大圆圈中间是开火键、外圈拖动转身，按住开火往左右拖可以边打边转；左上角有小地图。</li>
     </ul>
@@ -173,10 +176,12 @@
   </div>
   <div class="hint" id="endWait">等待房主重新开始…</div>
 </div>
+<button id="muteBtn">🔊</button>
 <div id="toast"></div>
 <div id="safeArea"></div>
 
 <script src="qrcode.js"></script>
+<script src="sfx.js"></script>
 <script src="game.js"></script>
 </body>
 </html>

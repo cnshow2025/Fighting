@@ -37,6 +37,13 @@
     return r3Loading;
   }
   let endResult = null;
+  // 刺激感：倒数、大字播报、命中标记、中弹闪红和画面抖动
+  let lastCd = null, lastTime = null, goUntil = 0;
+  let banner = null;                 // { text, color, until }
+  let hitMark = null;                // { x, y, until }
+  let hurtUntil = 0, shakeUntil = 0;
+  const vibrate = ms => { try { navigator.vibrate && navigator.vibrate(ms); } catch {} };
+  const showBanner = (text, color) => { banner = { text, color, until: performance.now() + 1800 }; };
   const shown = new Map();   // id -> 平滑显示用的位置
   const killFeed = [];       // { text, color, until }
 
@@ -103,30 +110,58 @@
         endResult = null;
         shown.clear();
         killFeed.length = 0;
+        lastCd = lastTime = null;
+        banner = hitMark = null;
         inGame = true;
         showScreen('game');
         resize();
         break;
-      case 'state': state = m; break;
+      case 'state': onState(m); break;
+      case 'lastman': {   // 一队只剩最后一人
+        Sfx.lastman();
+        showBanner(m.id === myId ? '你是最后一人！撑住！' : `${TEAM_NAME[m.team]}只剩最后一人！`, m.team === 'red' ? '#ff6b6f' : '#6aa8ff');
+        break;
+      }
       case 'medkit':
+        if (m.id === myId) Sfx.medkit();
         killFeed.push({ text: `${m.name} 吃到救护包，补满血`, color: '#4ade80', until: Date.now() + 4000 });
         if (killFeed.length > 4) killFeed.shift();
         break;
       case 'obs': {   // 木箱、沙包被打到
         const o = map && map.obstacles[m.i];
-        if (o) { o.hp = m.hp; if (m.hp <= 0) o.dead = true; }
+        if (o) {
+          o.hp = m.hp;
+          if (m.hp <= 0) o.dead = true;
+          // 依距离决定碎裂声大小
+          const me = state && state.me;
+          const d = me ? Math.hypot(o.x + o.w / 2 - me.x, o.y + o.h / 2 - me.y) : 600;
+          const vol = 1 - d / 1200;
+          if (vol > 0.05) (m.hp <= 0 ? Sfx.smash : Sfx.crack)(vol);
+        }
         break;
       }
       case 'kill': {
         const color = m.killerTeam === 'red' ? '#ff6b6f' : '#6aa8ff';
         killFeed.push({ text: `${m.killer} 击倒 ${m.victim}`, color, until: Date.now() + 5000 });
         if (killFeed.length > 4) killFeed.shift();
+        if (m.killerId === myId) Sfx.kill();
+        if (m.victimId === myId) { Sfx.death(); vibrate(300); }
+        if (m.streak >= 2) {   // 连杀播报
+          Sfx.streak();
+          showBanner(`${m.killer} ${['', '', '双杀', '三杀', '四杀', '五杀'][Math.min(m.streak, 5)]}！`, color);
+        }
         break;
       }
-      case 'end':
+      case 'end': {
         endResult = m.result;
+        const r = m.result, myTeam = state && state.me ? state.me.team : null;
+        const won = r.seriesOver ? r.seriesWinner : r.winner;
+        if (won === 'draw') Sfx.draw();
+        else if (!myTeam || won === myTeam) Sfx.win(r.seriesOver);
+        else Sfx.lose();
         updateEndPanel();
         break;
+      }
       case 'abort':   // 房主中止了这一局
         inGame = false;
         endResult = null;
@@ -136,6 +171,23 @@
         break;
       case 'error': toast(m.msg); break;
     }
+  }
+
+  // 每次收到服务器画面：处理音效事件、开局倒数、最后 10 秒
+  function onState(m) {
+    state = m;
+    for (const e of m.ev || []) {
+      if (e.k === 'sh') Sfx.shot(e.v, !!e.me);
+      else if (e.k === 'hit') { Sfx.hit(); hitMark = { x: e.x, y: e.y, until: performance.now() + 250 }; }
+      else if (e.k === 'hurt') { Sfx.hurt(); vibrate(80); hurtUntil = performance.now() + 400; shakeUntil = performance.now() + 220; }
+    }
+    if (m.cd !== lastCd) {
+      if (m.cd > 0) Sfx.beep();
+      else if (lastCd > 0) { Sfx.go(); goUntil = performance.now() + 800; }
+      lastCd = m.cd;
+    }
+    if (m.cd === 0 && m.time <= 10 && m.time > 0 && m.time !== lastTime) Sfx.tick();
+    lastTime = m.time;
   }
 
   // ===== 大厅 =====
@@ -224,6 +276,9 @@
     if (lobby) renderLobby();
     showScreen('lobbyScreen');
   };
+  const updateMute = () => ($('muteBtn').textContent = Sfx.muted ? '🔇' : '🔊');
+  $('muteBtn').onclick = () => { Sfx.setMuted(!Sfx.muted); updateMute(); };
+  updateMute();
   $('helpBtn').onclick = () => $('helpModal').classList.add('show');
   $('helpClose').onclick = () => $('helpModal').classList.remove('show');
   $('botFill').onchange = () => sendMsg({ t: 'settings', botFill: $('botFill').checked });
@@ -618,6 +673,67 @@
     ctx.stroke();
   }
 
+  let cam2d = null;
+
+  // 屏幕位置：命中标记要画在被打中的人身上（第一、三人称画在准星上）
+  function worldToScreen(x, y) {
+    if (fpActive()) return { x: vw / 2, y: vh / 2 };
+    if (use3d && r3) { const p = r3.project(x, y, 40); return p.visible ? p : null; }
+    if (!cam2d) return null;
+    return { x: vw / 2 + (x - cam2d.camX) * cam2d.scale, y: vh / 2 + (y - cam2d.camY) * cam2d.scale };
+  }
+
+  function drawEffects(now) {
+    // 中弹：画面边缘闪红
+    if (now < hurtUntil) {
+      const a = (hurtUntil - now) / 400;
+      const g = ctx.createRadialGradient(vw / 2, vh / 2, Math.min(vw, vh) * 0.3, vw / 2, vh / 2, Math.max(vw, vh) * 0.75);
+      g.addColorStop(0, 'rgba(255,0,0,0)');
+      g.addColorStop(1, `rgba(255,0,0,${0.55 * a})`);
+      ctx.fillStyle = g;
+      ctx.fillRect(0, 0, vw, vh);
+    }
+    // 画面抖一下
+    const shaking = now < shakeUntil;
+    const tf = shaking ? `translate(${(Math.random() - 0.5) * 12}px,${(Math.random() - 0.5) * 12}px)` : '';
+    if (canvas.style.transform !== tf) { canvas.style.transform = tf; $('canvas3d').style.transform = tf; }
+    // 命中标记：白色 X
+    if (hitMark && now < hitMark.until) {
+      const p = worldToScreen(hitMark.x, hitMark.y);
+      if (p) {
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        for (const [dx, dy] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) { ctx.moveTo(p.x + dx * 6, p.y + dy * 6); ctx.lineTo(p.x + dx * 14, p.y + dy * 14); }
+        ctx.stroke();
+      }
+    }
+    // 大字播报（连杀、最后一人）
+    if (banner && now < banner.until && !endResult) {
+      ctx.globalAlpha = Math.min(1, (banner.until - now) / 400);
+      ctx.textAlign = 'center';
+      ctx.font = 'bold 34px sans-serif';
+      ctx.lineWidth = 5;
+      ctx.strokeStyle = 'rgba(0,0,0,0.7)';
+      ctx.strokeText(banner.text, vw / 2, vh * 0.3);
+      ctx.fillStyle = banner.color;
+      ctx.fillText(banner.text, vw / 2, vh * 0.3);
+      ctx.globalAlpha = 1;
+    }
+    // 开局倒数 3、2、1、开打！
+    if (!endResult && state && (state.cd > 0 || now < goUntil)) {
+      const txt = state.cd > 0 ? String(state.cd) : '开打！';
+      ctx.textAlign = 'center';
+      const cy = vh / 2 + 125;   // 放在自己人物下方，不挡住人
+      ctx.font = `bold ${state.cd > 0 ? 84 : 60}px sans-serif`;
+      ctx.lineWidth = 6;
+      ctx.strokeStyle = 'rgba(0,0,0,0.7)';
+      ctx.strokeText(txt, vw / 2, cy);
+      ctx.fillStyle = state.cd > 0 ? '#ffd166' : '#4ade80';
+      ctx.fillText(txt, vw / 2, cy);
+    }
+  }
+
   let lastFrame = performance.now();
   function frame(now) {
     const dt = Math.min(0.1, (now - lastFrame) / 1000);
@@ -675,6 +791,7 @@
         scale = Math.min(vw / map.w, vh / map.h) * 0.95;
         camX = map.w / 2; camY = map.h / 2;
       }
+      cam2d = { camX, camY, scale };
       ctx.setTransform(dpr * scale, 0, 0, dpr * scale, dpr * (vw / 2 - camX * scale), dpr * (vh / 2 - camY * scale));
 
       // 地面
@@ -805,7 +922,7 @@
     // 击倒消息
     ctx.textAlign = 'right';
     ctx.font = '14px sans-serif';
-    let fy = 64 + safe.top;   // 留出右上角“回大厅”按钮的位置
+    let fy = 108 + safe.top;   // 留出右上角“回大厅”和静音按钮的位置
     const t = Date.now();
     for (const k of killFeed) {
       if (k.until < t) continue;
@@ -882,6 +999,8 @@
       ctx.globalAlpha = 1;
     }
 
+    drawEffects(now);
+
     // 结算
     if (endResult) {
       ctx.fillStyle = 'rgba(0,0,0,0.6)';
@@ -911,6 +1030,11 @@
       ctx.fillText(sub, vw / 2, vh / 2 + 4);
       ctx.font = 'bold 20px sans-serif';
       ctx.fillText(sc, vw / 2, vh / 2 + 36);
+      if (r.mvp) {   // 这一关击倒最多的人
+        ctx.fillStyle = '#ffd166';
+        ctx.font = 'bold 18px sans-serif';
+        ctx.fillText(`⭐ MVP：${r.mvp.name}（击倒 ${r.mvp.kills}）`, vw / 2, vh / 2 + 64);
+      }
     }
   }
   requestAnimationFrame(frame);
