@@ -18,10 +18,10 @@ window.Sfx = (() => {
       master.connect(comp).connect(ctx.destination);
       // 回音：用一段慢慢变小的杂音当作空间的回响
       reverb = ctx.createConvolver();
-      const len = Math.floor(ctx.sampleRate * 1.2), ir = ctx.createBuffer(2, len, ctx.sampleRate);
+      const len = Math.floor(ctx.sampleRate * 1.6), ir = ctx.createBuffer(2, len, ctx.sampleRate);
       for (let ch = 0; ch < 2; ch++) {
         const d = ir.getChannelData(ch);
-        for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 3.5);
+        for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 3);
       }
       reverb.buffer = ir;
       reverb.connect(master);
@@ -73,23 +73,23 @@ window.Sfx = (() => {
   }
   const notes = (list, type, vol, gap, dur) => list.forEach((f, i) => tone(f, dur, type, vol, i * gap));
 
-  // 枪声：尖锐爆裂 + 由亮变闷的“砰” + 低频冲击 + 回音
+  // 枪声（步枪）：尖锐爆裂 + 由亮变闷的“砰” + 低沉的冲击和隆隆声 + 回音
   function gunshot(vol, far) {
     const t = ctx.currentTime;
-    const pitch = 0.9 + Math.random() * 0.2;            // 每枪音高稍微不同
+    const pitch = 0.8 + Math.random() * 0.15;           // 每枪音高稍微不同，整体偏低沉
     const out = ctx.createGain();
     out.gain.value = vol;
     out.connect(master);
     const wet = ctx.createGain();                        // 远处的枪声回音比例比较多
-    wet.gain.value = far ? 0.9 : 0.35;
+    wet.gain.value = far ? 1.0 : 0.5;
     out.connect(wet).connect(reverb);
 
     // 1) 爆裂：极短的高频杂音（远处听不太到）
     if (!far) {
       const s = noise(), f = ctx.createBiquadFilter(), g = ctx.createGain();
-      f.type = 'highpass'; f.frequency.value = 2500;
-      g.gain.setValueAtTime(0.9, t);
-      g.gain.exponentialRampToValueAtTime(0.001, t + 0.025);
+      f.type = 'highpass'; f.frequency.value = 2200;
+      g.gain.setValueAtTime(0.8, t);
+      g.gain.exponentialRampToValueAtTime(0.001, t + 0.035);
       s.connect(f).connect(g).connect(out);
       s.start(t); s.stop(t + 0.05);
     }
@@ -97,23 +97,32 @@ window.Sfx = (() => {
     {
       const s = noise(), f = ctx.createBiquadFilter(), g = ctx.createGain();
       f.type = 'lowpass';
-      f.frequency.setValueAtTime((far ? 1400 : 5000) * pitch, t);
-      f.frequency.exponentialRampToValueAtTime(far ? 250 : 400, t + 0.18);
+      f.frequency.setValueAtTime((far ? 1100 : 3500) * pitch, t);
+      f.frequency.exponentialRampToValueAtTime(far ? 180 : 220, t + 0.25);
       g.gain.setValueAtTime(far ? 0.7 : 1.0, t);
-      g.gain.exponentialRampToValueAtTime(0.001, t + (far ? 0.3 : 0.22));
+      g.gain.exponentialRampToValueAtTime(0.001, t + (far ? 0.4 : 0.32));
       s.connect(f).connect(g).connect(out);
-      s.start(t); s.stop(t + 0.35);
+      s.start(t); s.stop(t + 0.45);
     }
     // 3) 低频冲击
     {
       const o = ctx.createOscillator(), g = ctx.createGain();
       o.type = 'sine';
-      o.frequency.setValueAtTime(140 * pitch, t);
-      o.frequency.exponentialRampToValueAtTime(38, t + 0.16);
-      g.gain.setValueAtTime(far ? 0.5 : 0.9, t);
-      g.gain.exponentialRampToValueAtTime(0.001, t + 0.18);
+      o.frequency.setValueAtTime(110 * pitch, t);
+      o.frequency.exponentialRampToValueAtTime(30, t + 0.25);
+      g.gain.setValueAtTime(far ? 0.6 : 1.1, t);
+      g.gain.exponentialRampToValueAtTime(0.001, t + 0.28);
       o.connect(g).connect(out);
-      o.start(t); o.stop(t + 0.2);
+      o.start(t); o.stop(t + 0.3);
+    }
+    // 4) 低沉的隆隆声（步枪的厚重感）
+    {
+      const s = noise(), f = ctx.createBiquadFilter(), g = ctx.createGain();
+      f.type = 'lowpass'; f.frequency.value = 180;
+      g.gain.setValueAtTime(far ? 0.6 : 0.9, t);
+      g.gain.exponentialRampToValueAtTime(0.001, t + 0.45);
+      s.connect(f).connect(g).connect(out);
+      s.start(t); s.stop(t + 0.5);
     }
   }
 
