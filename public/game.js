@@ -500,6 +500,18 @@
     ctx.stroke();
   }
 
+  // 3D 用的血条：一排小长方块，每中一枪就有一块变黑
+  function drawHpBar(x, y, p, isMe) {
+    const bw = 11, bh = 6, gap = 2, total = cfg.maxHp * bw + (cfg.maxHp - 1) * gap;
+    const x0 = x - total / 2;
+    ctx.fillStyle = isMe ? '#fff' : 'rgba(0,0,0,0.6)';   // 外框：自己是白色
+    ctx.fillRect(x0 - 2, y - 2, total + 4, bh + 4);
+    for (let i = 0; i < cfg.maxHp; i++) {
+      ctx.fillStyle = i < p.hp ? TEAM_COLOR[p.team] : '#111';
+      ctx.fillRect(x0 + i * (bw + gap), y, bw, bh);
+    }
+  }
+
   // 上方显示用的小人头：圆头 + 肩膀
   function drawHead(x, y, color) {
     ctx.fillStyle = color;
@@ -549,9 +561,9 @@
       for (const p of state.players) {
         if (!p.alive) continue;
         const s = shown.get(p.id);
-        const pt = r3.project(s.x, s.y, 72);
+        const pt = r3.project(s.x, s.y, 70);   // 头顶上方，不挡住立体人的头
         if (!pt.visible) continue;
-        drawPie(pt.x, pt.y, 9, p, me && p.id === me.id);
+        drawHpBar(pt.x, pt.y - 6, p, me && p.id === me.id);
         ctx.fillStyle = '#fff';
         ctx.font = p.bot ? 'bold 12px sans-serif' : 'bold 16px sans-serif';
         ctx.textAlign = 'center';
