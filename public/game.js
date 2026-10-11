@@ -569,12 +569,16 @@
     }
   }
 
-  // 圆圈切成和血量一样多的饼块，每中一枪就有一块变黑
+  // 血量一律分成 3 块显示（6 点血时中 2 枪才黑一块）
+  const HP_BLOCKS = 3;
+  const litBlocks = hp => Math.ceil(hp / (cfg.maxHp / HP_BLOCKS));
+
+  // 圆圈切成 3 块饼，血少了就有一块变黑
   function drawPie(x, y, R, p, isMe) {
-    const slice = Math.PI * 2 / cfg.maxHp;
-    for (let i = 0; i < cfg.maxHp; i++) {
+    const slice = Math.PI * 2 / HP_BLOCKS, lit = litBlocks(p.hp);
+    for (let i = 0; i < HP_BLOCKS; i++) {
       const a0 = -Math.PI / 2 + i * slice;
-      ctx.fillStyle = i < p.hp ? TEAM_COLOR[p.team] : '#111';
+      ctx.fillStyle = i < lit ? TEAM_COLOR[p.team] : '#111';
       ctx.beginPath();
       ctx.moveTo(x, y);
       ctx.arc(x, y, R, a0, a0 + slice);
@@ -584,7 +588,7 @@
     ctx.strokeStyle = 'rgba(0,0,0,0.6)';
     ctx.lineWidth = 1.5;
     ctx.beginPath();
-    for (let i = 0; i < cfg.maxHp; i++) {
+    for (let i = 0; i < HP_BLOCKS; i++) {
       const a0 = -Math.PI / 2 + i * slice;
       ctx.moveTo(x, y);
       ctx.lineTo(x + Math.cos(a0) * R, y + Math.sin(a0) * R);
@@ -645,14 +649,14 @@
     return h + 10;
   }
 
-  // 3D 用的血条：一排小长方块，每中一枪就有一块变黑
+  // 3D 用的血条：3 个小长方块，血少了就有一块变黑
   function drawHpBar(x, y, p, isMe) {
-    const bw = 11, bh = 6, gap = 2, total = cfg.maxHp * bw + (cfg.maxHp - 1) * gap;
+    const bw = 11, bh = 6, gap = 2, total = HP_BLOCKS * bw + (HP_BLOCKS - 1) * gap, lit = litBlocks(p.hp);
     const x0 = x - total / 2;
     ctx.fillStyle = isMe ? '#fff' : 'rgba(0,0,0,0.6)';   // 外框：自己是白色
     ctx.fillRect(x0 - 2, y - 2, total + 4, bh + 4);
-    for (let i = 0; i < cfg.maxHp; i++) {
-      ctx.fillStyle = i < p.hp ? TEAM_COLOR[p.team] : '#111';
+    for (let i = 0; i < HP_BLOCKS; i++) {
+      ctx.fillStyle = i < lit ? TEAM_COLOR[p.team] : '#111';
       ctx.fillRect(x0 + i * (bw + gap), y, bw, bh);
     }
   }
