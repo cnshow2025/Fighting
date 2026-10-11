@@ -30,7 +30,10 @@
     .team li { padding: 0; }
     .team button { padding: 6px; }
     .team button.invite { margin-top: 4px; padding: 4px; }
-    .actions button { padding: 8px 16px !important; font-size: 16px !important; }
+    .actions { gap: 8px; }
+    .actions button { padding: 7px 10px !important; font-size: 14px !important; }
+    .viewbox button { padding: 6px 8px !important; font-size: 13px !important; }
+    .botbox { font-size: 14px; gap: 5px; }
   }
   .team.red { background: #4a1f24; border: 2px solid #e5484d; }
   .team.blue { background: #1c2c4a; border: 2px solid #3e8ef7; }
@@ -109,7 +112,7 @@
   </div>
   <div class="hint" id="waitingList"></div>
   <div class="actions">
-    <div class="viewbox"><button data-view="2d">2D</button><button data-view="3d">3D</button></div>
+    <div class="viewbox"><button data-view="2d">2D</button><button data-view="3d">3D</button><button data-view="fpp">第一人称</button><button data-view="tpp">第三人称</button></div>
     <button id="leaveTeamBtn" style="display:none; background:#555; font-size:16px; padding:10px 16px">退出队伍</button>
     <label class="botbox" id="botBox"><input type="checkbox" id="botFill">电脑补位</label>
     <button id="startBtn" style="display:none">开始游戏</button>
@@ -125,7 +128,8 @@
       <li>左半屏拖动 = 移动；右半屏拖动 = 瞄准，推远一点自动开火。</li>
       <li>子弹无限。每人 3 点血，圆圈每中一枪黑一块，中 3 枪倒下。</li>
       <li>躲在遮蔽物后面，敌人就看不到你。</li>
-      <li>大厅里可以选 2D 或 3D 画面，每个人自己选，规则一样。手机跑不顺就用 2D。</li>
+      <li>大厅里可以选 2D、3D、第一人称、第三人称，每个人自己选，规则一样。手机跑不顺就用 2D。</li>
+      <li>第一、三人称：左边移动，右半边左右拖动转身，按住右下角“开火”射击；左上角有小地图。</li>
     </ul>
     <h3>三关三战两胜</h3>
     <ul>

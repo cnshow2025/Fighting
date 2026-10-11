@@ -12,9 +12,13 @@
   let map = null;
   let cfg = { playerR: 18, bulletR: 4, maxHp: 3, matchTime: 60 };
   let state = null;
-  // 画面：每个人在自己手机上选 2D 或 3D（记在这只手机上）
-  let use3d = false;
-  try { use3d = localStorage.getItem('view') === '3d'; } catch {}
+  // 画面：每个人在自己手机上选（记在这只手机上）
+  // '2d' 俯视、'3d' 斜上方 3D、'fpp' 第一人称、'tpp' 第三人称
+  const VIEWS = ['2d', '3d', 'fpp', 'tpp'];
+  let view = '2d';
+  try { const v = localStorage.getItem('view'); if (VIEWS.includes(v)) view = v; } catch {}
+  let use3d = view !== '2d';
+  const isFP = () => view === 'fpp' || view === 'tpp';
   let r3 = null, r3Loading = null;
   function ensure3d() {
     if (!r3Loading) {
@@ -23,6 +27,7 @@
         r3.resize(vw, vh);
         if (map) r3.setMap(map);
       }).catch(() => {
+        view = '2d';
         use3d = false;
         r3Loading = null;
         toast('这只手机不支持 3D，已改用 2D');
@@ -91,6 +96,7 @@
         map = m.map;
         if (use3d) ensure3d();
         if (r3) { r3.setMap(map); r3.resetCamera(); }
+        fpYaw = null;   // 第一、三人称：开局时面向服务器给的方向
         cfg = { playerR: m.playerR, bulletR: m.bulletR, maxHp: m.maxHp, matchTime: m.matchTime,
           level: m.level, levelName: m.levelName, score: m.score, introUntil: performance.now() + 2500 };
         state = null;
@@ -196,12 +202,13 @@
   $('startBtn').onclick = () => sendMsg({ t: 'start' });
   $('leaveTeamBtn').onclick = () => sendMsg({ t: 'leaveTeam' });
   function updateViewButtons() {
-    document.querySelectorAll('[data-view]').forEach(b => b.classList.toggle('on', (b.dataset.view === '3d') === use3d));
+    document.querySelectorAll('[data-view]').forEach(b => b.classList.toggle('on', b.dataset.view === view));
   }
   document.querySelectorAll('[data-view]').forEach(b => {
     b.onclick = () => {
-      use3d = b.dataset.view === '3d';
-      try { localStorage.setItem('view', use3d ? '3d' : '2d'); } catch {}
+      view = b.dataset.view;
+      use3d = view !== '2d';
+      try { localStorage.setItem('view', view); } catch {}
       if (use3d) ensure3d();   // 先在大厅里载入，开局时就不用等
       updateViewButtons();
     };
@@ -282,6 +289,12 @@
     aim: { id: null, ox: 0, oy: 0, x: 0, y: 0 },
   };
   let lastAim = { x: 1, y: 0 };
+  // 第一、三人称：自己面对的方向（弧度）、转身用的手指、按住开火键的手指
+  let fpYaw = null;
+  const look = { id: null, x: 0 };
+  let fireTouch = null;
+  const fpActive = () => isFP() && use3d && r3 && fpYaw !== null && state && state.me && state.me.alive;
+  const fireBtn = () => ({ x: vw - 95 - safe.right, y: vh - 95 - safe.bottom, r: 48 });
 
   function stickVec(s) {
     let dx = s.x - s.ox, dy = s.y - s.oy;
@@ -292,7 +305,13 @@
 
   canvas.addEventListener('touchstart', e => {
     e.preventDefault();
+    const fp = fpActive();
     for (const t of e.changedTouches) {
+      if (fp) {
+        const fb = fireBtn();
+        if (Math.hypot(t.clientX - fb.x, t.clientY - fb.y) < fb.r + 10) { if (fireTouch === null) fireTouch = t.identifier; continue; }
+        if (t.clientX >= window.innerWidth / 2) { if (look.id === null) { look.id = t.identifier; look.x = t.clientX; } continue; }
+      }
       const s = t.clientX < window.innerWidth / 2 ? sticks.move : sticks.aim;
       if (s.id !== null) continue;
       s.id = t.identifier;
@@ -304,6 +323,10 @@
   canvas.addEventListener('touchmove', e => {
     e.preventDefault();
     for (const t of e.changedTouches) {
+      if (t.identifier === look.id) {   // 左右拖动转身
+        if (fpYaw !== null) fpYaw += (t.clientX - look.x) * 0.006;
+        look.x = t.clientX;
+      }
       for (const s of Object.values(sticks)) {
         if (s.id === t.identifier) { s.x = t.clientX; s.y = t.clientY; }
       }
@@ -314,6 +337,8 @@
     e.preventDefault();
     for (const t of e.changedTouches) {
       for (const s of Object.values(sticks)) if (s.id === t.identifier) s.id = null;
+      if (look.id === t.identifier) look.id = null;
+      if (fireTouch === t.identifier) fireTouch = null;
     }
   };
   canvas.addEventListener('touchend', endTouch, { passive: false });
@@ -322,6 +347,12 @@
   setInterval(() => {
     if (!inGame) return;
     const mv = sticks.move.id !== null ? stickVec(sticks.move) : { x: 0, y: 0 };
+    if (fpActive()) {
+      // 摇杆往上 = 往自己面对的方向走，左右 = 横着走；枪口永远朝正前方
+      const f = { x: Math.cos(fpYaw), y: Math.sin(fpYaw) }, r = { x: -f.y, y: f.x };
+      sendMsg({ t: 'input', mx: f.x * -mv.y + r.x * mv.x, my: f.y * -mv.y + r.y * mv.x, ax: f.x, ay: f.y, fire: fireTouch !== null });
+      return;
+    }
     let fire = false;
     if (sticks.aim.id !== null) {
       const a = stickVec(sticks.aim);
@@ -500,6 +531,54 @@
     ctx.stroke();
   }
 
+  // 第一、三人称：画面正中间的准星
+  function drawCrosshair() {
+    const cx = vw / 2, cy = vh / 2;
+    ctx.strokeStyle = 'rgba(255,255,255,0.9)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(cx - 14, cy); ctx.lineTo(cx - 5, cy);
+    ctx.moveTo(cx + 5, cy); ctx.lineTo(cx + 14, cy);
+    ctx.moveTo(cx, cy - 14); ctx.lineTo(cx, cy - 5);
+    ctx.moveTo(cx, cy + 5); ctx.lineTo(cx, cy + 14);
+    ctx.stroke();
+  }
+
+  // 第一、三人称：左上角的小地图（掩体、救护包、队友、看得到的敌人、自己和方向），返回占用的高度
+  function drawMinimap(me) {
+    const w = Math.min(160, vw * 0.22), h = w * map.h / map.w;
+    const x0 = 10 + safe.left, y0 = 10 + safe.top, k = w / map.w;
+    ctx.fillStyle = 'rgba(0,0,0,0.55)';
+    ctx.fillRect(x0, y0, w, h);
+    ctx.strokeStyle = 'rgba(255,255,255,0.6)';
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(x0, y0, w, h);
+    ctx.fillStyle = 'rgba(200,190,170,0.75)';
+    for (const o of map.obstacles) if (!o.dead) ctx.fillRect(x0 + o.x * k, y0 + o.y * k, Math.max(1.5, o.w * k), Math.max(1.5, o.h * k));
+    ctx.fillStyle = '#4ade80';
+    for (const [x, y] of state.kits || []) ctx.fillRect(x0 + x * k - 2, y0 + y * k - 2, 4, 4);
+    for (const p of state.players) {
+      if (!p.alive || p.id === me.id) continue;
+      const s = shown.get(p.id);
+      ctx.fillStyle = TEAM_COLOR[p.team];
+      ctx.beginPath();
+      ctx.arc(x0 + s.x * k, y0 + s.y * k, 3, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    const ms = shown.get(me.id);
+    if (ms) {   // 自己：白色箭头指向面对的方向
+      const mx = x0 + ms.x * k, my = y0 + ms.y * k, a = fpYaw;
+      ctx.fillStyle = '#fff';
+      ctx.beginPath();
+      ctx.moveTo(mx + Math.cos(a) * 7, my + Math.sin(a) * 7);
+      ctx.lineTo(mx + Math.cos(a + 2.5) * 5, my + Math.sin(a + 2.5) * 5);
+      ctx.lineTo(mx + Math.cos(a - 2.5) * 5, my + Math.sin(a - 2.5) * 5);
+      ctx.closePath();
+      ctx.fill();
+    }
+    return h + 10;
+  }
+
   // 3D 用的血条：一排小长方块，每中一枪就有一块变黑
   function drawHpBar(x, y, p, isMe) {
     const bw = 11, bh = 6, gap = 2, total = cfg.maxHp * bw + (cfg.maxHp - 1) * gap;
@@ -556,10 +635,15 @@
     for (const id of shown.keys()) if (!visibleIds.has(id)) shown.delete(id);
 
     if (in3d) {
-      r3.render({ state, shown, me, now, dt });
-      // 3D 时，名字和血量饼图画在上面这层 2D 画布上
+      if (isFP() && fpYaw === null && me) {   // 开局时先面向服务器给的方向
+        const mine = state.players.find(p => p.id === me.id);
+        if (mine) fpYaw = mine.a;
+      }
+      r3.render({ state, shown, me, now, dt, view, yaw: fpYaw });
+      // 3D 时，名字和血条画在上面这层 2D 画布上
       for (const p of state.players) {
         if (!p.alive) continue;
+        if (fpActive() && p.id === me.id) continue;   // 第一、三人称不画自己的（左上角已经有血量，也不挡准星）
         const s = shown.get(p.id);
         const pt = r3.project(s.x, s.y, 70);   // 头顶上方，不挡住立体人的头
         if (!pt.visible) continue;
@@ -679,15 +763,21 @@
       ctx.fillText(`第 ${cfg.level} 关 · ${cfg.levelName}　比分 红 ${cfg.score.red} : 蓝 ${cfg.score.blue}`, vw / 2, 52 + safe.top);
     }
 
+    const fpOn = fpActive();
+    let hudY = 0;   // 第一、三人称时左上角先放小地图，文字往下移
+    if (fpOn) {
+      hudY = drawMinimap(me) + 4;
+      drawCrosshair();
+    }
     if (me) {
       ctx.textAlign = 'left';
       ctx.font = 'bold 18px sans-serif';
       ctx.fillStyle = '#fff';
-      ctx.fillText(`❤ ${me.hp}/${cfg.maxHp}`, 14 + safe.left, 30 + safe.top);
+      ctx.fillText(`❤ ${me.hp}/${cfg.maxHp}`, 14 + safe.left, 30 + safe.top + hudY);
       ctx.fillStyle = '#ffd166';
-      ctx.fillText('子弹 ∞', 14 + safe.left, 56 + safe.top);
+      ctx.fillText('子弹 ∞', 14 + safe.left, 56 + safe.top + hudY);
       ctx.fillStyle = '#ccc';
-      ctx.fillText(`击倒 ${me.kills}`, 14 + safe.left, 82 + safe.top);
+      ctx.fillText(`击倒 ${me.kills}`, 14 + safe.left, 82 + safe.top + hudY);
       if (!me.alive) {
         ctx.textAlign = 'center';
         ctx.fillStyle = '#ff6b6f';
@@ -727,11 +817,25 @@
       ctx.arc(s.ox + v.x * STICK_R, s.oy + v.y * STICK_R, 24, 0, Math.PI * 2);
       ctx.fill();
     }
-    if (me && me.alive && sticks.move.id === null && sticks.aim.id === null && state.time > cfg.matchTime - 10) {   // 开局前 10 秒显示操作提示
+    if (fpOn) {   // 开火键
+      const fb = fireBtn();
+      ctx.fillStyle = fireTouch !== null ? 'rgba(229,72,77,0.85)' : 'rgba(229,72,77,0.45)';
+      ctx.beginPath();
+      ctx.arc(fb.x, fb.y, fb.r, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(255,255,255,0.7)';
+      ctx.lineWidth = 3;
+      ctx.stroke();
+      ctx.fillStyle = '#fff';
+      ctx.font = 'bold 18px sans-serif';
       ctx.textAlign = 'center';
-      ctx.fillStyle = 'rgba(255,255,255,0.5)';
+      ctx.fillText('开火', fb.x, fb.y + 6);
+    }
+    if (me && me.alive && sticks.move.id === null && sticks.aim.id === null && look.id === null && state.time > cfg.matchTime - 10) {   // 开局前 10 秒显示操作提示
+      ctx.textAlign = 'center';
+      ctx.fillStyle = 'rgba(255,255,255,0.6)';
       ctx.font = '15px sans-serif';
-      ctx.fillText('左边拖动移动　　右边拖动瞄准开火', vw / 2, vh - 20 - safe.bottom);
+      ctx.fillText(fpOn ? '左边拖动移动　　右边拖动转身　　按住开火键射击' : '左边拖动移动　　右边拖动瞄准开火', vw / 2, vh - 20 - safe.bottom);
     }
 
     // 开局显示关卡名称

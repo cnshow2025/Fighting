@@ -1,4 +1,4 @@
-// 3D 画面（斜上方俯视）：只负责把游戏世界画成 3D，规则和网络都沿用 game.js
+// 3D 画面：斜上方俯视、第一人称、第三人称三种镜头。只负责把游戏世界画成 3D，规则和网络都沿用 game.js
 // 坐标对应：游戏的 x → 3D 的 x，游戏的 y → 3D 的 z，高度是 3D 的 y
 import * as THREE from './three.module.min.js';
 
@@ -10,8 +10,24 @@ export function create(canvas) {
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
 
   const scene = new THREE.Scene();
-  scene.background = new THREE.Color(0x0b0c10);
-  const camera = new THREE.PerspectiveCamera(30, 1, 10, 8000);   // 视角窄一点，画面边缘比较不会歪
+  const DARK = new THREE.Color(0x0b0c10), SKY = new THREE.Color(0x9fb8d0);
+  scene.background = DARK;
+  const camera = new THREE.PerspectiveCamera(30, 1, 10, 8000);   // 俯视时视角窄一点，画面边缘比较不会歪
+  scene.add(camera);
+  function setFov(f) {
+    if (camera.fov !== f) { camera.fov = f; camera.updateProjectionMatrix(); }
+  }
+
+  // 第一人称时画面右下方看到的枪和袖子（跟着镜头）
+  const fpGun = new THREE.Group();
+  const sleeveMat = new THREE.MeshLambertMaterial({ color: TEAM_COLOR.blue });
+  const gunBody = new THREE.Mesh(new THREE.BoxGeometry(2.2, 2.8, 20), new THREE.MeshLambertMaterial({ color: 0x3a3a3a }));
+  const sleeve = new THREE.Mesh(new THREE.BoxGeometry(4.5, 4.5, 9), sleeveMat);
+  sleeve.position.set(0.5, -3, 8);
+  fpGun.add(gunBody, sleeve);
+  fpGun.position.set(11, -11, -32);
+  fpGun.visible = false;
+  camera.add(fpGun);
 
   // 光：天空光 + 太阳光（不产生影子，手机跑起来比较顺）
   scene.add(new THREE.HemisphereLight(0xffffff, 0x334433, 0.9));
@@ -52,6 +68,11 @@ export function create(canvas) {
     obstacleMeshes.length = 0;
 
     // 地面 + 格线 + 两边出生区
+    // 地图外面的大片草地：第一、三人称看远方时不会是一片黑
+    const outside = new THREE.Mesh(new THREE.PlaneGeometry(9000, 9000), new THREE.MeshLambertMaterial({ color: 0x27311f }));
+    outside.rotation.x = -Math.PI / 2;
+    outside.position.set(map.w / 2, -0.5, map.h / 2);
+    world.add(outside);
     const ground = new THREE.Mesh(new THREE.PlaneGeometry(map.w, map.h), new THREE.MeshLambertMaterial({ color: 0x2f3a2a }));
     ground.rotation.x = -Math.PI / 2;
     ground.position.set(map.w / 2, 0, map.h / 2);
@@ -213,9 +234,12 @@ export function create(canvas) {
   const camTarget = new THREE.Vector3();
   let camReady = false;
 
-  function render({ state, shown, me, now, dt }) {
+  // view：'3d' 斜上方俯视、'fpp' 第一人称、'tpp' 第三人称；yaw 是自己面对的方向
+  function render({ state, shown, me, now, dt, view, yaw }) {
     if (!mapRef) return;
     updateObstacles();
+    const meShown = me && shown.get(me.id);
+    const fp = (view === 'fpp' || view === 'tpp') && meShown && me.alive && yaw != null;
 
     // 玩家
     const seen = new Set();
@@ -225,9 +249,10 @@ export function create(canvas) {
       seen.add(p.id);
       let pm = playerMeshes.get(p.id);
       if (!pm || pm.team !== p.team) { if (pm) scene.remove(pm.g); pm = makePlayer(p.team); playerMeshes.set(p.id, pm); }
-      pm.g.visible = true;
+      const isMe = me && p.id === me.id;
+      pm.g.visible = !(fp && isMe && view === 'fpp');   // 第一人称看不到自己的身体
       pm.g.position.set(s.x, 0, s.y);
-      pm.g.rotation.y = -p.a;
+      pm.g.rotation.y = fp && isMe ? -yaw : -p.a;       // 自己的方向用手机上的，转身比较即时
       if (!p.alive && !pm.dead) {          // 倒下：变灰、躺在地上
         pm.dead = true;
         pm.mat.color.set(0x666666);
@@ -255,8 +280,28 @@ export function create(canvas) {
       g.userData.inner.rotation.y = now / 700;
     });
 
-    // 镜头：活着时跟着自己（斜后上方）；倒下或旁观时看整张地图
-    const meShown = me && shown.get(me.id);
+    // 镜头
+    scene.background = fp ? SKY : DARK;
+    fpGun.visible = fp && view === 'fpp';
+    if (fp) {
+      const fx = Math.cos(yaw), fz = Math.sin(yaw);
+      meRing.visible = false;
+      if (view === 'fpp') {            // 第一人称：从眼睛看出去
+        setFov(70);
+        sleeveMat.color.set(TEAM_COLOR[me.team]);
+        camera.position.set(meShown.x, 46, meShown.y);
+        camera.lookAt(meShown.x + fx * 100, 44, meShown.y + fz * 100);
+      } else {                         // 第三人称：在自己后上方
+        setFov(60);
+        camera.position.set(meShown.x - fx * 120, 88, meShown.y - fz * 120);
+        camera.lookAt(meShown.x + fx * 160, 36, meShown.y + fz * 160);
+      }
+      camReady = false;   // 之后切回俯视镜头时直接到位
+      renderer.render(scene, camera);
+      return;
+    }
+    // 斜上方俯视：活着时跟着自己；倒下或旁观时看整张地图
+    setFov(30);
     const aspect = renderer.domElement.clientWidth / Math.max(1, renderer.domElement.clientHeight);
     let tx, tz, height, back;
     if (meShown && me.alive) {
