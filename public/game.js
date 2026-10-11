@@ -588,7 +588,7 @@
     }
   }
 
-  // 血量一律分成 3 块显示（6 点血时中 2 枪才黑一块）
+  // 血量一律分成 3 块显示（3 点血时每中 1 枪黑一块）
   const HP_BLOCKS = 3;
   const litBlocks = hp => Math.ceil(hp / (cfg.maxHp / HP_BLOCKS));
 

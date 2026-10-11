@@ -16,8 +16,8 @@ const PLAYER_R = 18;
 const PLAYER_SPEED = 220;     // 像素/秒
 const BULLET_SPEED = 750;     // 像素/秒
 const BULLET_R = 4;
-const MAX_HP = 6;             // 中 6 枪倒下
-const FIRE_COOLDOWN = 150;    // 毫秒（一秒约 7 发）
+const MAX_HP = 3;             // 中 3 枪倒下
+const FIRE_COOLDOWN = 350;    // 毫秒（手枪，一秒约 3 发）
 const MATCH_TIME = 60;        // 一局 1 分钟（秒）
 const TEAM_SIZE = 5;
 const MIN_TEAM = 3;           // 每队至少 3 人，不足的用电脑补
@@ -192,8 +192,8 @@ function distToSegSq(px, py, x1, y1, x2, y2) {
 // 电脑和真人规则一样：只看得到视线内的敌人，子弹、血量都一样
 const BOT_LEVELS = {
   easy:   { reaction: 900, aimErr: 0.22, extraCooldown: 500, coverHp: 0, lead: 0 },
-  normal: { reaction: 500, aimErr: 0.10, extraCooldown: 150, coverHp: 2, lead: 0.5 },
-  hard:   { reaction: 250, aimErr: 0.04, extraCooldown: 0,   coverHp: 4, lead: 0.9 },
+  normal: { reaction: 500, aimErr: 0.10, extraCooldown: 150, coverHp: 1, lead: 0.5 },
+  hard:   { reaction: 250, aimErr: 0.04, extraCooldown: 0,   coverHp: 2, lead: 0.9 },
 };
 
 function createBot(team, n) {
