@@ -104,6 +104,7 @@
         if (use3d) ensure3d();
         if (r3) { r3.setMap(map); r3.resetCamera(); }
         fpYaw = null;   // 第一、三人称：开局时面向服务器给的方向
+        releaseTouches();
         cfg = { playerR: m.playerR, bulletR: m.bulletR, maxHp: m.maxHp, matchTime: m.matchTime,
           level: m.level, levelName: m.levelName, score: m.score, introUntil: performance.now() + 2500 };
         state = null;
@@ -154,6 +155,7 @@
       }
       case 'end': {
         endResult = m.result;
+        releaseTouches();
         const r = m.result, myTeam = state && state.me ? state.me.team : null;
         const won = r.seriesOver ? r.seriesWinner : r.winner;
         if (won === 'draw') Sfx.draw();
@@ -164,6 +166,7 @@
       }
       case 'abort':   // 房主中止了这一局
         inGame = false;
+        releaseTouches();
         endResult = null;
         if (lobby) renderLobby();
         showScreen('lobbyScreen');
@@ -360,8 +363,23 @@
     return { x: dx / STICK_R, y: dy / STICK_R };
   }
 
+  // 放开所有手指的记录（开局、结束、换画面时用，避免“卡住的手指”让转身失灵或一直开火）
+  function releaseTouches() {
+    for (const s of Object.values(sticks)) s.id = null;
+    look.id = null;
+    fireTouch = null;
+  }
+  // 手机有时不会通知“手指放开了”：检查记录的手指是否真的还在屏幕上
+  function dropStaleTouches(e) {
+    const on = new Set(Array.from(e.touches, t => t.identifier));
+    for (const s of Object.values(sticks)) if (s.id !== null && !on.has(s.id)) s.id = null;
+    if (look.id !== null && !on.has(look.id)) look.id = null;
+    if (fireTouch !== null && !on.has(fireTouch)) fireTouch = null;
+  }
+
   canvas.addEventListener('touchstart', e => {
     e.preventDefault();
+    dropStaleTouches(e);
     const fp = fpActive();
     for (const t of e.changedTouches) {
       if (fp && t.clientX >= window.innerWidth / 2) {
@@ -390,7 +408,7 @@
     e.preventDefault();
     for (const t of e.changedTouches) {
       if (t.identifier === look.id) {   // 左右拖动转身
-        if (fpYaw !== null) fpYaw += (t.clientX - look.x) * 0.006;
+        if (fpYaw !== null) fpYaw += (t.clientX - look.x) * 0.008;
         look.x = t.clientX;
       }
       for (const s of Object.values(sticks)) {
@@ -406,6 +424,7 @@
       if (look.id === t.identifier) look.id = null;
       if (fireTouch === t.identifier) fireTouch = null;
     }
+    dropStaleTouches(e);
   };
   canvas.addEventListener('touchend', endTouch, { passive: false });
   canvas.addEventListener('touchcancel', endTouch, { passive: false });
