@@ -54,7 +54,10 @@
   .helpbox h3 { margin: 12px 0 2px; font-size: 16px; color: #ffd166; }
   .helpbox ul { margin: 0; padding-left: 20px; }
   .helpbox button { display: block; margin: 14px auto 0; }
-  #canvas { position: fixed; inset: 0; width: 100vw; height: 100vh; display: none; touch-action: none; }
+  #canvas, #canvas3d { position: fixed; inset: 0; width: 100vw; height: 100vh; display: none; touch-action: none; }
+  .viewbox { display: flex; border-radius: 10px; overflow: hidden; border: 2px solid #555; }
+  .viewbox button { border-radius: 0; background: #2a2d35; color: #aaa; font-size: 15px; padding: 8px 14px; }
+  .viewbox button.on { background: #f0a020; color: #111; }
   #inviteBanner { display: none; font-size: 20px; font-weight: bold; padding: 8px 18px; border-radius: 10px; }
   .team button.invite { display: none; margin-top: 6px; background: transparent; font-size: 14px; padding: 6px; }
   .team.red button.invite { border: 2px solid #e5484d; color: #ffb3b5; }
@@ -106,6 +109,7 @@
   </div>
   <div class="hint" id="waitingList"></div>
   <div class="actions">
+    <div class="viewbox"><button data-view="2d">2D</button><button data-view="3d">3D</button></div>
     <button id="leaveTeamBtn" style="display:none; background:#555; font-size:16px; padding:10px 16px">退出队伍</button>
     <label class="botbox" id="botBox"><input type="checkbox" id="botFill">电脑补位</label>
     <button id="startBtn" style="display:none">开始游戏</button>
@@ -121,6 +125,7 @@
       <li>左半屏拖动 = 移动；右半屏拖动 = 瞄准，推远一点自动开火。</li>
       <li>子弹无限。每人 3 点血，圆圈每中一枪黑一块，中 3 枪倒下。</li>
       <li>躲在遮蔽物后面，敌人就看不到你。</li>
+      <li>大厅里可以选 2D 或 3D 画面，每个人自己选，规则一样。手机跑不顺就用 2D。</li>
     </ul>
     <h3>三关三战两胜</h3>
     <ul>
@@ -154,6 +159,7 @@
   </div>
 </div>
 
+<canvas id="canvas3d"></canvas>
 <canvas id="canvas"></canvas>
 <button id="abortBtn">回大厅</button>
 <div id="endPanel">

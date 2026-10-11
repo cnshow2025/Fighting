@@ -12,6 +12,25 @@
   let map = null;
   let cfg = { playerR: 18, bulletR: 4, maxHp: 3, matchTime: 60 };
   let state = null;
+  // 画面：每个人在自己手机上选 2D 或 3D（记在这只手机上）
+  let use3d = false;
+  try { use3d = localStorage.getItem('view') === '3d'; } catch {}
+  let r3 = null, r3Loading = null;
+  function ensure3d() {
+    if (!r3Loading) {
+      r3Loading = import('./render3d.js').then(mod => {
+        r3 = mod.create($('canvas3d'));
+        r3.resize(vw, vh);
+        if (map) r3.setMap(map);
+      }).catch(() => {
+        use3d = false;
+        r3Loading = null;
+        toast('这只手机不支持 3D，已改用 2D');
+        updateViewButtons();
+      });
+    }
+    return r3Loading;
+  }
   let endResult = null;
   const shown = new Map();   // id -> 平滑显示用的位置
   const killFeed = [];       // { text, color, until }
@@ -20,6 +39,7 @@
   function showScreen(name) {
     for (const s of ['joinScreen', 'lobbyScreen']) $(s).classList.toggle('show', s === name);
     canvas.style.display = name === 'game' ? 'block' : 'none';
+    $('canvas3d').style.display = name === 'game' && use3d ? 'block' : 'none';
     updateEndPanel();
   }
 
@@ -69,6 +89,8 @@
         break;
       case 'start':
         map = m.map;
+        if (use3d) ensure3d();
+        if (r3) { r3.setMap(map); r3.resetCamera(); }
         cfg = { playerR: m.playerR, bulletR: m.bulletR, maxHp: m.maxHp, matchTime: m.matchTime,
           level: m.level, levelName: m.levelName, score: m.score, introUntil: performance.now() + 2500 };
         state = null;
@@ -173,6 +195,19 @@
   });
   $('startBtn').onclick = () => sendMsg({ t: 'start' });
   $('leaveTeamBtn').onclick = () => sendMsg({ t: 'leaveTeam' });
+  function updateViewButtons() {
+    document.querySelectorAll('[data-view]').forEach(b => b.classList.toggle('on', (b.dataset.view === '3d') === use3d));
+  }
+  document.querySelectorAll('[data-view]').forEach(b => {
+    b.onclick = () => {
+      use3d = b.dataset.view === '3d';
+      try { localStorage.setItem('view', use3d ? '3d' : '2d'); } catch {}
+      if (use3d) ensure3d();   // 先在大厅里载入，开局时就不用等
+      updateViewButtons();
+    };
+  });
+  updateViewButtons();
+  if (use3d) ensure3d();
   $('restartBtn').onclick = () => sendMsg(endResult && !endResult.seriesOver ? { t: 'next' } : { t: 'start' });
   $('abortBtn').onclick = () => {
     if (confirm('确定要结束这一局，让大家回到大厅吗？')) sendMsg({ t: 'abort' });
@@ -314,6 +349,7 @@
     vh = window.innerHeight;
     canvas.width = vw * dpr;
     canvas.height = vh * dpr;
+    if (r3) r3.resize(vw, vh);
   }
   window.addEventListener('resize', resize);
   resize();
@@ -436,6 +472,34 @@
     }
   }
 
+  // 圆圈切成和血量一样多的饼块，每中一枪就有一块变黑
+  function drawPie(x, y, R, p, isMe) {
+    const slice = Math.PI * 2 / cfg.maxHp;
+    for (let i = 0; i < cfg.maxHp; i++) {
+      const a0 = -Math.PI / 2 + i * slice;
+      ctx.fillStyle = i < p.hp ? TEAM_COLOR[p.team] : '#111';
+      ctx.beginPath();
+      ctx.moveTo(x, y);
+      ctx.arc(x, y, R, a0, a0 + slice);
+      ctx.closePath();
+      ctx.fill();
+    }
+    ctx.strokeStyle = 'rgba(0,0,0,0.6)';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    for (let i = 0; i < cfg.maxHp; i++) {
+      const a0 = -Math.PI / 2 + i * slice;
+      ctx.moveTo(x, y);
+      ctx.lineTo(x + Math.cos(a0) * R, y + Math.sin(a0) * R);
+    }
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(x, y, R, 0, Math.PI * 2);
+    ctx.strokeStyle = isMe ? '#fff' : TEAM_COLOR[p.team];
+    ctx.lineWidth = isMe ? 3 : 2;
+    ctx.stroke();
+  }
+
   // 上方显示用的小人头：圆头 + 肩膀
   function drawHead(x, y, color) {
     ctx.fillStyle = color;
@@ -460,8 +524,9 @@
     if (!inGame || !map) return;
 
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.fillStyle = '#0b0c10';
-    ctx.fillRect(0, 0, vw, vh);
+    const in3d = use3d && r3;
+    if (in3d) ctx.clearRect(0, 0, vw, vh);   // 3D 画面在下面那层，这层只画文字和按钮
+    else { ctx.fillStyle = '#0b0c10'; ctx.fillRect(0, 0, vw, vh); }
     if (!state) return;
 
     const me = state.me;
@@ -478,119 +543,112 @@
     }
     for (const id of shown.keys()) if (!visibleIds.has(id)) shown.delete(id);
 
-    // 镜头
-    let camX, camY, scale;
-    const meShown = me && shown.get(me.id);
-    if (meShown && me.alive) {
-      scale = Math.min(vw, vh) / 520;
-      camX = meShown.x; camY = meShown.y;
-    } else {
-      scale = Math.min(vw / map.w, vh / map.h) * 0.95;
-      camX = map.w / 2; camY = map.h / 2;
-    }
-    ctx.setTransform(dpr * scale, 0, 0, dpr * scale, dpr * (vw / 2 - camX * scale), dpr * (vh / 2 - camY * scale));
-
-    // 地面
-    ctx.fillStyle = '#2a3326';
-    ctx.fillRect(0, 0, map.w, map.h);
-    ctx.strokeStyle = 'rgba(255,255,255,0.05)';
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    for (let x = 0; x <= map.w; x += 100) { ctx.moveTo(x, 0); ctx.lineTo(x, map.h); }
-    for (let y = 0; y <= map.h; y += 100) { ctx.moveTo(0, y); ctx.lineTo(map.w, y); }
-    ctx.stroke();
-    ctx.fillStyle = 'rgba(229,72,77,0.12)';
-    ctx.fillRect(0, 0, 120, map.h);
-    ctx.fillStyle = 'rgba(62,142,247,0.12)';
-    ctx.fillRect(map.w - 120, 0, 120, map.h);
-
-    if (meShown && me.alive) drawShadows(meShown.x, meShown.y);
-
-    // 遮蔽物
-    for (const o of map.obstacles) drawObstacle(o);
-    ctx.strokeStyle = '#555';
-    ctx.lineWidth = 4;
-    ctx.strokeRect(0, 0, map.w, map.h);
-
-    // 救护包：白底红十字，轻轻闪动
-    if (state.kits) {
-      const pulse = 1 + 0.08 * Math.sin(now / 200);
-      for (const [x, y] of state.kits) {
-        const h = 14 * pulse;
-        ctx.fillStyle = 'rgba(74,222,128,0.25)';
-        ctx.beginPath();
-        ctx.arc(x, y, h + 8, 0, Math.PI * 2);
-        ctx.fill();
+    if (in3d) {
+      r3.render({ state, shown, me, now, dt });
+      // 3D 时，名字和血量饼图画在上面这层 2D 画布上
+      for (const p of state.players) {
+        if (!p.alive) continue;
+        const s = shown.get(p.id);
+        const pt = r3.project(s.x, s.y, 72);
+        if (!pt.visible) continue;
+        drawPie(pt.x, pt.y, 9, p, me && p.id === me.id);
         ctx.fillStyle = '#fff';
-        ctx.strokeStyle = '#c62828';
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        if (ctx.roundRect) ctx.roundRect(x - h, y - h, h * 2, h * 2, 5);
-        else ctx.rect(x - h, y - h, h * 2, h * 2);   // 旧手机浏览器没有圆角方法
-        ctx.fill();
-        ctx.stroke();
-        ctx.fillStyle = '#e53935';
-        ctx.fillRect(x - h * 0.2, y - h * 0.65, h * 0.4, h * 1.3);
-        ctx.fillRect(x - h * 0.65, y - h * 0.2, h * 1.3, h * 0.4);
+        ctx.font = p.bot ? 'bold 12px sans-serif' : 'bold 16px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText(p.name, pt.x, pt.y - 14);
       }
-    }
-
-    // 子弹
-    for (const [x, y, t] of state.bullets) {
-      ctx.fillStyle = t === 0 ? '#ffb3b5' : '#b8d6ff';
-      ctx.beginPath();
-      ctx.arc(x, y, cfg.bulletR, 0, Math.PI * 2);
-      ctx.fill();
-    }
-
-    // 玩家
-    const R = cfg.playerR;
-    for (const p of state.players) {
-      const s = shown.get(p.id);
-      if (!p.alive) {
-        ctx.strokeStyle = 'rgba(200,200,200,0.5)';
-        ctx.lineWidth = 4;
-        ctx.beginPath();
-        ctx.moveTo(s.x - 10, s.y - 10); ctx.lineTo(s.x + 10, s.y + 10);
-        ctx.moveTo(s.x + 10, s.y - 10); ctx.lineTo(s.x - 10, s.y + 10);
-        ctx.stroke();
-        continue;
+    } else {
+      // 镜头
+      let camX, camY, scale;
+      const meShown = me && shown.get(me.id);
+      if (meShown && me.alive) {
+        scale = Math.min(vw, vh) / 520;
+        camX = meShown.x; camY = meShown.y;
+      } else {
+        scale = Math.min(vw / map.w, vh / map.h) * 0.95;
+        camX = map.w / 2; camY = map.h / 2;
       }
-      ctx.strokeStyle = '#ddd';
-      ctx.lineWidth = 6;
+      ctx.setTransform(dpr * scale, 0, 0, dpr * scale, dpr * (vw / 2 - camX * scale), dpr * (vh / 2 - camY * scale));
+
+      // 地面
+      ctx.fillStyle = '#2a3326';
+      ctx.fillRect(0, 0, map.w, map.h);
+      ctx.strokeStyle = 'rgba(255,255,255,0.05)';
+      ctx.lineWidth = 1;
       ctx.beginPath();
-      ctx.moveTo(s.x, s.y);
-      ctx.lineTo(s.x + Math.cos(p.a) * (R + 12), s.y + Math.sin(p.a) * (R + 12));
+      for (let x = 0; x <= map.w; x += 100) { ctx.moveTo(x, 0); ctx.lineTo(x, map.h); }
+      for (let y = 0; y <= map.h; y += 100) { ctx.moveTo(0, y); ctx.lineTo(map.w, y); }
       ctx.stroke();
-      // 圆圈切成和血量一样多的饼块，每中一枪就有一块变黑
-      const slice = Math.PI * 2 / cfg.maxHp;
-      for (let i = 0; i < cfg.maxHp; i++) {
-        const a0 = -Math.PI / 2 + i * slice;
-        ctx.fillStyle = i < p.hp ? TEAM_COLOR[p.team] : '#111';
+      ctx.fillStyle = 'rgba(229,72,77,0.12)';
+      ctx.fillRect(0, 0, 120, map.h);
+      ctx.fillStyle = 'rgba(62,142,247,0.12)';
+      ctx.fillRect(map.w - 120, 0, 120, map.h);
+
+      if (meShown && me.alive) drawShadows(meShown.x, meShown.y);
+
+      // 遮蔽物
+      for (const o of map.obstacles) drawObstacle(o);
+      ctx.strokeStyle = '#555';
+      ctx.lineWidth = 4;
+      ctx.strokeRect(0, 0, map.w, map.h);
+
+      // 救护包：白底红十字，轻轻闪动
+      if (state.kits) {
+        const pulse = 1 + 0.08 * Math.sin(now / 200);
+        for (const [x, y] of state.kits) {
+          const h = 14 * pulse;
+          ctx.fillStyle = 'rgba(74,222,128,0.25)';
+          ctx.beginPath();
+          ctx.arc(x, y, h + 8, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.fillStyle = '#fff';
+          ctx.strokeStyle = '#c62828';
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          if (ctx.roundRect) ctx.roundRect(x - h, y - h, h * 2, h * 2, 5);
+          else ctx.rect(x - h, y - h, h * 2, h * 2);   // 旧手机浏览器没有圆角方法
+          ctx.fill();
+          ctx.stroke();
+          ctx.fillStyle = '#e53935';
+          ctx.fillRect(x - h * 0.2, y - h * 0.65, h * 0.4, h * 1.3);
+          ctx.fillRect(x - h * 0.65, y - h * 0.2, h * 1.3, h * 0.4);
+        }
+      }
+
+      // 子弹
+      for (const [x, y, t] of state.bullets) {
+        ctx.fillStyle = t === 0 ? '#ffb3b5' : '#b8d6ff';
+        ctx.beginPath();
+        ctx.arc(x, y, cfg.bulletR, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      // 玩家
+      const R = cfg.playerR;
+      for (const p of state.players) {
+        const s = shown.get(p.id);
+        if (!p.alive) {
+          ctx.strokeStyle = 'rgba(200,200,200,0.5)';
+          ctx.lineWidth = 4;
+          ctx.beginPath();
+          ctx.moveTo(s.x - 10, s.y - 10); ctx.lineTo(s.x + 10, s.y + 10);
+          ctx.moveTo(s.x + 10, s.y - 10); ctx.lineTo(s.x - 10, s.y + 10);
+          ctx.stroke();
+          continue;
+        }
+        ctx.strokeStyle = '#ddd';
+        ctx.lineWidth = 6;
         ctx.beginPath();
         ctx.moveTo(s.x, s.y);
-        ctx.arc(s.x, s.y, R, a0, a0 + slice);
-        ctx.closePath();
-        ctx.fill();
+        ctx.lineTo(s.x + Math.cos(p.a) * (R + 12), s.y + Math.sin(p.a) * (R + 12));
+        ctx.stroke();
+        drawPie(s.x, s.y, R, p, me && p.id === me.id);
+        ctx.fillStyle = '#fff';
+        ctx.font = p.bot ? 'bold 13px sans-serif' : 'bold 18px sans-serif';   // 真人名字大一点
+        ctx.textAlign = 'center';
+        ctx.fillText(p.name, s.x, s.y - R - 8);
       }
-      ctx.strokeStyle = 'rgba(0,0,0,0.6)';
-      ctx.lineWidth = 1.5;
-      ctx.beginPath();
-      for (let i = 0; i < cfg.maxHp; i++) {
-        const a0 = -Math.PI / 2 + i * slice;
-        ctx.moveTo(s.x, s.y);
-        ctx.lineTo(s.x + Math.cos(a0) * R, s.y + Math.sin(a0) * R);
-      }
-      ctx.stroke();
-      ctx.beginPath();
-      ctx.arc(s.x, s.y, R, 0, Math.PI * 2);
-      ctx.strokeStyle = me && p.id === me.id ? '#fff' : TEAM_COLOR[p.team];
-      ctx.lineWidth = me && p.id === me.id ? 3 : 2;
-      ctx.stroke();
-      ctx.fillStyle = '#fff';
-      ctx.font = p.bot ? 'bold 13px sans-serif' : 'bold 18px sans-serif';   // 真人名字大一点
-      ctx.textAlign = 'center';
-      ctx.fillText(p.name, s.x, s.y - R - 8);
+
     }
 
     // ===== 屏幕上的 HUD =====
