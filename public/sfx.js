@@ -1,6 +1,6 @@
 // 音效：全部用 Web Audio 在手机上即时合成，不用下载音效文件，离线也能用
 window.Sfx = (() => {
-  let ctx = null, master = null, reverb = null, muted = false;
+  let ctx = null, master = null, reverb = null, pistolBuf = null, muted = false;
   try { muted = localStorage.getItem('muted') === '1'; } catch {}
   const VOLUME = 0.6;
 
@@ -25,6 +25,9 @@ window.Sfx = (() => {
       }
       reverb.buffer = ir;
       reverb.connect(master);
+      // 手枪枪声：真实录音（The Free Firearm Sound Library，CC0 公共领域）
+      fetch('pistol.wav').then(r => r.arrayBuffer()).then(d => new Promise((ok, no) => ctx.decodeAudioData(d, ok, no)))
+        .then(buf => { pistolBuf = buf; }).catch(() => {});
     }
     if (ctx.state === 'suspended') ctx.resume();
   }
@@ -73,57 +76,25 @@ window.Sfx = (() => {
   }
   const notes = (list, type, vol, gap, dur) => list.forEach((f, i) => tone(f, dur, type, vol, i * gap));
 
-  // 枪声（步枪）：尖锐爆裂 + 由亮变闷的“砰” + 低沉的冲击和隆隆声 + 回音
+  // 枪声（手枪）：播放真实录音；每枪音高稍微不同，远处的比较闷、回音比较多
   function gunshot(vol, far) {
+    if (!pistolBuf) return;
     const t = ctx.currentTime;
-    const pitch = 0.65 + Math.random() * 0.1;           // 每枪音高稍微不同，整体偏低沉
-    const out = ctx.createGain();
-    out.gain.value = vol;
-    out.connect(master);
-    const wet = ctx.createGain();                        // 远处的枪声回音比例比较多
-    wet.gain.value = far ? 1.0 : 0.5;
-    out.connect(wet).connect(reverb);
-
-    // 1) 爆裂：极短的高频杂音（远处听不太到）
-    if (!far) {
-      const s = noise(), f = ctx.createBiquadFilter(), g = ctx.createGain();
-      f.type = 'highpass'; f.frequency.value = 1500;
-      g.gain.setValueAtTime(0.45, t);
-      g.gain.exponentialRampToValueAtTime(0.001, t + 0.035);
-      s.connect(f).connect(g).connect(out);
-      s.start(t); s.stop(t + 0.05);
+    const s = ctx.createBufferSource(), g = ctx.createGain();
+    s.buffer = pistolBuf;
+    s.playbackRate.value = 0.94 + Math.random() * 0.12;
+    g.gain.value = vol * 1.6;   // 录音本身比较小声，放大一点
+    let node = s;
+    if (far) {
+      const f = ctx.createBiquadFilter();
+      f.type = 'lowpass'; f.frequency.value = 1800;
+      node = node.connect(f);
     }
-    // 2) 主体：杂音经过一个从高快速降到低的滤波器，听起来像“砰”
-    {
-      const s = noise(), f = ctx.createBiquadFilter(), g = ctx.createGain();
-      f.type = 'lowpass';
-      f.frequency.setValueAtTime((far ? 800 : 2200) * pitch, t);
-      f.frequency.exponentialRampToValueAtTime(far ? 120 : 150, t + 0.3);
-      g.gain.setValueAtTime(far ? 0.7 : 1.0, t);
-      g.gain.exponentialRampToValueAtTime(0.001, t + (far ? 0.4 : 0.32));
-      s.connect(f).connect(g).connect(out);
-      s.start(t); s.stop(t + 0.45);
-    }
-    // 3) 低频冲击
-    {
-      const o = ctx.createOscillator(), g = ctx.createGain();
-      o.type = 'sine';
-      o.frequency.setValueAtTime(80 * pitch, t);
-      o.frequency.exponentialRampToValueAtTime(25, t + 0.3);
-      g.gain.setValueAtTime(far ? 0.7 : 1.3, t);
-      g.gain.exponentialRampToValueAtTime(0.001, t + 0.34);
-      o.connect(g).connect(out);
-      o.start(t); o.stop(t + 0.36);
-    }
-    // 4) 低沉的隆隆声（步枪的厚重感）
-    {
-      const s = noise(), f = ctx.createBiquadFilter(), g = ctx.createGain();
-      f.type = 'lowpass'; f.frequency.value = 120;
-      g.gain.setValueAtTime(far ? 0.7 : 1.1, t);
-      g.gain.exponentialRampToValueAtTime(0.001, t + 0.55);
-      s.connect(f).connect(g).connect(out);
-      s.start(t); s.stop(t + 0.6);
-    }
+    node.connect(g).connect(master);
+    const wet = ctx.createGain();
+    wet.gain.value = far ? 0.6 : 0.15;
+    g.connect(wet).connect(reverb);
+    s.start(t);
   }
 
   let lastOtherShot = 0;

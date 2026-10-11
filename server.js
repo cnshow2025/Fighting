@@ -64,7 +64,7 @@ let medkits = [];     // 救护包：{ x, y, active, respawnAt }
 
 // ===== 静态文件服务 =====
 const PUBLIC_DIR = path.join(__dirname, 'public');
-const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'application/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8' };
+const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'application/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.wav': 'audio/wav' };
 
 // 本机局域网 IP（给邀请二维码用）
 function localIPs() {
