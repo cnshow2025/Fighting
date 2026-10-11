@@ -25,16 +25,6 @@ export function create(canvas) {
   const bulletPool = [];
   const kitPool = [];
 
-  // 掩体后面看不到的区域：每帧更新的半透明黑色阴影
-  const FOG_MAX = 400;
-  const fogPos = new Float32Array(FOG_MAX * 6 * 3);
-  const fogGeo = new THREE.BufferGeometry();
-  fogGeo.setAttribute('position', new THREE.BufferAttribute(fogPos, 3));
-  const fog = new THREE.Mesh(fogGeo, new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.5, depthWrite: false, side: THREE.DoubleSide }));
-  fog.frustumCulled = false;
-  fog.renderOrder = 1;
-  scene.add(fog);
-
   // 自己脚下的白圈
   const meRing = new THREE.Mesh(new THREE.RingGeometry(22, 27, 32), new THREE.MeshBasicMaterial({ color: 0xffffff }));
   meRing.rotation.x = -Math.PI / 2;
@@ -219,29 +209,6 @@ export function create(canvas) {
     return g;
   };
 
-  // 从自己位置算出被掩体挡住的区域（和 2D 版一样的算法）
-  function updateFog(px, pz) {
-    let n = 0;
-    const FAR = 3000, Y = 1;
-    const push = (x, z) => { fogPos[n++] = x; fogPos[n++] = Y; fogPos[n++] = z; };
-    for (const o of mapRef.obstacles) {
-      if (o.dead) continue;
-      const c = [[o.x, o.y], [o.x + o.w, o.y], [o.x + o.w, o.y + o.h], [o.x, o.y + o.h]];
-      for (let i = 0; i < 4; i++) {
-        if (n / 18 >= FOG_MAX) break;
-        const a = c[i], b = c[(i + 1) % 4];
-        const pa = proj(a, px, pz, FAR), pb = proj(b, px, pz, FAR);
-        push(a[0], a[1]); push(b[0], b[1]); push(pb[0], pb[1]);
-        push(a[0], a[1]); push(pb[0], pb[1]); push(pa[0], pa[1]);
-      }
-    }
-    fogGeo.setDrawRange(0, n / 3);
-    fogGeo.attributes.position.needsUpdate = true;
-  }
-  function proj(p, px, py, far) {
-    const dx = p[0] - px, dy = p[1] - py, l = Math.hypot(dx, dy) || 1;
-    return [p[0] + dx / l * far, p[1] + dy / l * far];
-  }
 
   const camTarget = new THREE.Vector3();
   let camReady = false;
@@ -297,14 +264,11 @@ export function create(canvas) {
       tx = meShown.x; tz = meShown.y; height = 860 * k; back = 620 * k;
       meRing.visible = true;
       meRing.position.set(meShown.x, 1.5, meShown.y);
-      updateFog(meShown.x, meShown.y);
-      fog.visible = true;
     } else {
       tx = mapRef.w / 2; tz = mapRef.h / 2;
       const k = aspect < 1.6 ? 1.6 / aspect : 1;
       height = 1900 * k; back = 1080 * k;
       meRing.visible = false;
-      fog.visible = false;
     }
     const want = new THREE.Vector3(tx, 0, tz);
     if (!camReady) { camTarget.copy(want); camReady = true; }
