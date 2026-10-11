@@ -8,19 +8,14 @@ const HEIGHT = { crate: 56, sandbag: 46, wall: 80, rock: 60 };
 export function create(canvas) {
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
-  renderer.shadowMap.enabled = true;
-  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(0x0b0c10);
   const camera = new THREE.PerspectiveCamera(30, 1, 10, 8000);   // 视角窄一点，画面边缘比较不会歪
 
-  // 光：天空光 + 一个会产生影子的太阳光
+  // 光：天空光 + 太阳光（不产生影子，手机跑起来比较顺）
   scene.add(new THREE.HemisphereLight(0xffffff, 0x334433, 0.9));
   const sun = new THREE.DirectionalLight(0xffffff, 1.1);
-  sun.castShadow = true;
-  sun.shadow.mapSize.set(1024, 1024);
-  Object.assign(sun.shadow.camera, { left: -950, right: 950, top: 950, bottom: -950, near: 10, far: 3000 });
   scene.add(sun, sun.target);
 
   let mapRef = null;
@@ -70,7 +65,6 @@ export function create(canvas) {
     const ground = new THREE.Mesh(new THREE.PlaneGeometry(map.w, map.h), new THREE.MeshLambertMaterial({ color: 0x2f3a2a }));
     ground.rotation.x = -Math.PI / 2;
     ground.position.set(map.w / 2, 0, map.h / 2);
-    ground.receiveShadow = true;
     world.add(ground);
     const lines = [];
     for (let x = 0; x <= map.w; x += 100) lines.push(x, 0.3, 0, x, 0.3, map.h);
@@ -113,7 +107,6 @@ export function create(canvas) {
       const geo = new THREE.BoxGeometry(o.w, H, o.h);
       const box = new THREE.Mesh(geo, mat);
       box.position.set(cx, H / 2, cz);
-      box.castShadow = box.receiveShadow = true;
       group.add(box);
       const edges = new THREE.LineSegments(new THREE.EdgesGeometry(geo), new THREE.LineBasicMaterial({ color: 0x4a3420 }));
       edges.position.copy(box.position);
@@ -134,7 +127,6 @@ export function create(canvas) {
           const bag = new THREE.Mesh(bagGeo, mat);
           bag.scale.set(horiz ? seg / 2 : th / 2, 12, horiz ? th / 2 : seg / 2);
           bag.position.set(horiz ? o.x + along : cx, 12 + layer * 22, horiz ? cz : o.y + along);
-          bag.castShadow = bag.receiveShadow = true;
           group.add(bag);
         }
       }
@@ -146,7 +138,6 @@ export function create(canvas) {
       mat = new THREE.MeshLambertMaterial({ map: tex });
       const box = new THREE.Mesh(new THREE.BoxGeometry(o.w, H, o.h), mat);
       box.position.set(cx, H / 2, cz);
-      box.castShadow = box.receiveShadow = true;
       group.add(box);
       const horiz = o.w >= o.h, len = horiz ? o.w : o.h;
       for (let k = 0; k < len / 30; k++) {   // 墙头的碎块
@@ -154,7 +145,6 @@ export function create(canvas) {
         const along = 10 + k * 30 + ((k * 13) % 9);
         if (along > len - 8) break;
         chunk.position.set(horiz ? o.x + along : cx, H + chunk.geometry.parameters.height / 2, horiz ? cz : o.y + along);
-        chunk.castShadow = true;
         group.add(chunk);
       }
     } else {                              // 石头：多面体
@@ -163,7 +153,6 @@ export function create(canvas) {
       rock.scale.set(o.w / 2, H / 2, o.h / 2);
       rock.position.set(cx, H / 2 - 4, cz);
       rock.rotation.y = (o.i * 0.7) % Math.PI;
-      rock.castShadow = rock.receiveShadow = true;
       group.add(rock);
     }
     // 打坏后留下的碎屑
@@ -200,7 +189,6 @@ export function create(canvas) {
     head.position.y = 47;
     const gun = new THREE.Mesh(new THREE.BoxGeometry(26, 6, 6), new THREE.MeshLambertMaterial({ color: 0xdddddd }));
     gun.position.set(22, 30, 0);
-    for (const m of [body, head, gun]) m.castShadow = true;
     g.add(body, head, gun);
     scene.add(g);
     return { g, mat, team, dead: false };
@@ -223,7 +211,6 @@ export function create(canvas) {
     const glow = new THREE.Mesh(new THREE.CircleGeometry(24, 24), new THREE.MeshBasicMaterial({ color: 0x4ade80, transparent: true, opacity: 0.3, depthWrite: false }));
     glow.rotation.x = -Math.PI / 2;
     glow.position.y = -10;
-    box.castShadow = true;
     const inner = new THREE.Group();
     inner.add(box, c1, c2);
     g.add(inner, glow);
