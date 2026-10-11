@@ -351,7 +351,7 @@
   let fpYaw = null;
   const look = { id: null, x0: 0, x: 0 };
   // 转身像摇杆：按住往左/右推就一直转，推得越远转得越快，放开就停
-  const TURN_R = 70, TURN_DEAD = 0.12, TURN_SPEED = 3.5;   // 推满的距离（像素）、中间不转的范围、最快每秒转几弧度（约 200°）
+  const TURN_R = 70, TURN_DEAD = 0.12, TURN_SPEED = 2.6;   // 推满的距离（像素）、中间不转的范围、最快每秒转几弧度（约 150°）
   const lookPush = () => Math.max(-1, Math.min(1, (look.x - look.x0) / TURN_R));
   let fireTouch = null;
   const fpActive = () => isFP() && use3d && r3 && fpYaw !== null && state && state.me && state.me.alive;
