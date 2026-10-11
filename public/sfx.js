@@ -76,7 +76,7 @@ window.Sfx = (() => {
   // 枪声（步枪）：尖锐爆裂 + 由亮变闷的“砰” + 低沉的冲击和隆隆声 + 回音
   function gunshot(vol, far) {
     const t = ctx.currentTime;
-    const pitch = 0.8 + Math.random() * 0.15;           // 每枪音高稍微不同，整体偏低沉
+    const pitch = 0.65 + Math.random() * 0.1;           // 每枪音高稍微不同，整体偏低沉
     const out = ctx.createGain();
     out.gain.value = vol;
     out.connect(master);
@@ -87,8 +87,8 @@ window.Sfx = (() => {
     // 1) 爆裂：极短的高频杂音（远处听不太到）
     if (!far) {
       const s = noise(), f = ctx.createBiquadFilter(), g = ctx.createGain();
-      f.type = 'highpass'; f.frequency.value = 2200;
-      g.gain.setValueAtTime(0.8, t);
+      f.type = 'highpass'; f.frequency.value = 1500;
+      g.gain.setValueAtTime(0.45, t);
       g.gain.exponentialRampToValueAtTime(0.001, t + 0.035);
       s.connect(f).connect(g).connect(out);
       s.start(t); s.stop(t + 0.05);
@@ -97,8 +97,8 @@ window.Sfx = (() => {
     {
       const s = noise(), f = ctx.createBiquadFilter(), g = ctx.createGain();
       f.type = 'lowpass';
-      f.frequency.setValueAtTime((far ? 1100 : 3500) * pitch, t);
-      f.frequency.exponentialRampToValueAtTime(far ? 180 : 220, t + 0.25);
+      f.frequency.setValueAtTime((far ? 800 : 2200) * pitch, t);
+      f.frequency.exponentialRampToValueAtTime(far ? 120 : 150, t + 0.3);
       g.gain.setValueAtTime(far ? 0.7 : 1.0, t);
       g.gain.exponentialRampToValueAtTime(0.001, t + (far ? 0.4 : 0.32));
       s.connect(f).connect(g).connect(out);
@@ -108,21 +108,21 @@ window.Sfx = (() => {
     {
       const o = ctx.createOscillator(), g = ctx.createGain();
       o.type = 'sine';
-      o.frequency.setValueAtTime(110 * pitch, t);
-      o.frequency.exponentialRampToValueAtTime(30, t + 0.25);
-      g.gain.setValueAtTime(far ? 0.6 : 1.1, t);
-      g.gain.exponentialRampToValueAtTime(0.001, t + 0.28);
+      o.frequency.setValueAtTime(80 * pitch, t);
+      o.frequency.exponentialRampToValueAtTime(25, t + 0.3);
+      g.gain.setValueAtTime(far ? 0.7 : 1.3, t);
+      g.gain.exponentialRampToValueAtTime(0.001, t + 0.34);
       o.connect(g).connect(out);
-      o.start(t); o.stop(t + 0.3);
+      o.start(t); o.stop(t + 0.36);
     }
     // 4) 低沉的隆隆声（步枪的厚重感）
     {
       const s = noise(), f = ctx.createBiquadFilter(), g = ctx.createGain();
-      f.type = 'lowpass'; f.frequency.value = 180;
-      g.gain.setValueAtTime(far ? 0.6 : 0.9, t);
-      g.gain.exponentialRampToValueAtTime(0.001, t + 0.45);
+      f.type = 'lowpass'; f.frequency.value = 120;
+      g.gain.setValueAtTime(far ? 0.7 : 1.1, t);
+      g.gain.exponentialRampToValueAtTime(0.001, t + 0.55);
       s.connect(f).connect(g).connect(out);
-      s.start(t); s.stop(t + 0.5);
+      s.start(t); s.stop(t + 0.6);
     }
   }
 
